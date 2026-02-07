@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fap Bird</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="startScreen" class="screen">
+            <h1>FAP BIRD</h1>
+            <p>Press SPACE to start</p>
+            <p class="instructions">Press SPACE to fap and fly!</p>
+        </div>
+        <div id="gameOverScreen" class="screen hidden">
+            <h1>GAME OVER</h1>
+            <p>Score: <span id="finalScore">0</span></p>
+            <p>Press SPACE to try again</p>
+        </div>
+        <div id="score">0</div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
