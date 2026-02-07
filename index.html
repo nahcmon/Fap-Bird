@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Fap Bird</title>
     <style>
         * {
@@ -17,6 +19,9 @@
             overflow: hidden;
             background: #000;
             font-family: 'Arial', sans-serif;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .game-container {
@@ -32,6 +37,7 @@
             width: 100%;
             height: 100%;
             background: linear-gradient(to bottom, #4ec0ca 0%, #87ceeb 50%, #deb887 50%, #d2b48c 100%);
+            touch-action: none;
         }
 
         .screen {
@@ -130,13 +136,13 @@
         </div>
         <div id="startScreen" class="screen hidden">
             <h1>FAP BIRD</h1>
-            <p>Press <span id="startKey">SPACE</span> to start</p>
-            <p class="instructions">Press <span id="flapKey">SPACE</span> to fap and fly!</p>
+            <p>Press <span id="startKey">SPACE</span> or TAP to start</p>
+            <p class="instructions">Press <span id="flapKey">SPACE</span> or TAP to fap and fly!</p>
         </div>
         <div id="gameOverScreen" class="screen hidden">
             <h1>GAME OVER</h1>
             <p>Score: <span id="finalScore">0</span></p>
-            <p id="restartText">Press SPACE to try again</p>
+            <p id="restartText">Press SPACE or TAP to try again</p>
         </div>
         <div id="score">0</div>
     </div>
@@ -891,7 +897,7 @@
                 ctx.fillText(`Score: ${bird.score}`, vp.width / 2, vp.height / 2 + 20);
 
                 const timeSinceDeath = Date.now() - bird.gameOverTime;
-                const restartMsg = timeSinceDeath < 1000 ? 'Wait...' : `Press ${bird.key.toUpperCase()}`;
+                const restartMsg = timeSinceDeath < 1000 ? 'Wait...' : `Press ${bird.key.toUpperCase()} or TAP`;
                 ctx.font = 'bold 28px Arial';
                 ctx.strokeText(restartMsg, vp.width / 2, vp.height / 2 + 70);
                 ctx.fillText(restartMsg, vp.width / 2, vp.height / 2 + 70);
@@ -977,7 +983,7 @@
                             const restartText = document.getElementById('restartText');
                             restartText.textContent = 'Wait...';
                             setTimeout(() => {
-                                restartText.textContent = `Press ${bird.key.toUpperCase()} to try again`;
+                                restartText.textContent = `Press ${bird.key.toUpperCase()} or TAP to try again`;
                             }, 1000);
                         }
                     }
@@ -1061,7 +1067,7 @@
                             const restartText = document.getElementById('restartText');
                             restartText.textContent = 'Wait...';
                             setTimeout(() => {
-                                restartText.textContent = 'Press ENTER to try again';
+                                restartText.textContent = 'Press ENTER or TAP to try again';
                             }, 1000);
                         }
                     } else {
@@ -1286,6 +1292,127 @@
                     playFapSound();
                 }
             }
+        });
+
+        // Touch support for mobile devices
+        let touchHandled = false;
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchHandled = false;
+
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const touchX = touch.clientX - rect.left;
+            const touchY = touch.clientY - rect.top;
+
+            if (gameState === 'start') {
+                // Start the game on touch
+                gameState = 'playing';
+                startScreen.classList.add('hidden');
+
+                // Reinitialize birds with correct viewport positions
+                if (gameMode !== 'single') {
+                    const playerData = players.map((p, index) => ({
+                        key: p.key,
+                        color: p.color,
+                        vp: getViewport(index, players.length)
+                    }));
+                    players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
+                }
+
+                players.forEach(bird => {
+                    bird.velocity = bird.jumpForce;
+                    bird.gameState = 'playing';
+                    createParticles(bird);
+                });
+                playFapSound();
+                touchHandled = true;
+            } else if (gameState === 'playing') {
+                if (gameMode === 'single') {
+                    // Single player - any touch makes bird flap
+                    const bird = players[0];
+                    if (bird.alive) {
+                        bird.velocity = bird.jumpForce;
+                        createParticles(bird);
+                        playFapSound();
+                        touchHandled = true;
+                    }
+                } else if (gameMode === 'unlimited') {
+                    // Unlimited mode - touch in player's viewport
+                    players.forEach((bird, index) => {
+                        const vp = getViewport(index, players.length);
+                        if (touchX >= vp.x && touchX < vp.x + vp.width &&
+                            touchY >= vp.y && touchY < vp.y + vp.height) {
+
+                            if (bird.gameState === 'playing' && bird.alive) {
+                                // Playing - flap
+                                bird.velocity = bird.jumpForce;
+                                createParticles(bird);
+                                playFapSound();
+                                touchHandled = true;
+                            } else if (bird.gameState === 'gameOver') {
+                                // Dead - restart this player
+                                const timeSinceDeath = Date.now() - bird.gameOverTime;
+                                if (timeSinceDeath >= 1000) {
+                                    const key = bird.key;
+                                    const color = bird.color;
+                                    players[index] = createBird(key, color, vp.height);
+                                    players[index].velocity = players[index].jumpForce;
+                                    createParticles(players[index]);
+                                    playFapSound();
+                                    touchHandled = true;
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    // Regular multiplayer - touch in player's viewport
+                    players.forEach((bird, index) => {
+                        const vp = getViewport(index, players.length);
+                        if (touchX >= vp.x && touchX < vp.x + vp.width &&
+                            touchY >= vp.y && touchY < vp.y + vp.height && bird.alive) {
+                            bird.velocity = bird.jumpForce;
+                            createParticles(bird);
+                            playFapSound();
+                            touchHandled = true;
+                        }
+                    });
+                }
+            } else if (gameState === 'gameOver') {
+                // Check cooldown (1 second)
+                const timeSinceDeath = Date.now() - gameOverTime;
+                if (timeSinceDeath >= 1000) {
+                    if (gameMode === 'single') {
+                        gameState = 'playing';
+                        gameOverScreen.classList.add('hidden');
+                        resetGame();
+                        players[0].velocity = players[0].jumpForce;
+                        createParticles(players[0]);
+                        playFapSound();
+                        touchHandled = true;
+                    } else if (gameMode === 'multi') {
+                        gameState = 'playing';
+                        gameOverScreen.classList.add('hidden');
+                        resetGame();
+                        players.forEach(bird => {
+                            bird.velocity = bird.jumpForce;
+                            createParticles(bird);
+                        });
+                        playFapSound();
+                        touchHandled = true;
+                    }
+                }
+            }
+        });
+
+        // Prevent default touch behaviors to avoid scrolling
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
         });
 
         // Start game loop
