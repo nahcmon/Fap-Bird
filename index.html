@@ -4,23 +4,1292 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fap Bird</title>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #4ec0ca 0%, #87ceeb 50%, #deb887 50%, #d2b48c 100%);
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 10;
+        }
+
+        .screen.hidden {
+            display: none;
+        }
+
+        .screen h1 {
+            font-size: 96px;
+            margin-bottom: 30px;
+            text-shadow: 4px 4px 0 #000;
+            color: #ff69b4;
+        }
+
+        .screen p {
+            font-size: 36px;
+            margin: 15px 0;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .instructions {
+            font-size: 28px !important;
+            color: #ffeb3b;
+        }
+
+        .menu-button {
+            font-size: 48px;
+            padding: 20px 40px;
+            margin: 20px;
+            background: linear-gradient(to bottom, #ff69b4, #ff1493);
+            border: 4px solid white;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: transform 0.2s;
+        }
+
+        .menu-button:hover {
+            transform: scale(1.1);
+            background: linear-gradient(to bottom, #ff1493, #ff69b4);
+        }
+
+        .player-setup {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+
+        .player-joined {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        #score {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 3px 3px 0 #000;
+            z-index: 5;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
     <div class="game-container">
         <canvas id="gameCanvas"></canvas>
-        <div id="startScreen" class="screen">
+        <div id="menuScreen" class="screen">
             <h1>FAP BIRD</h1>
-            <p>Press SPACE to start</p>
-            <p class="instructions">Press SPACE to fap and fly!</p>
+            <button class="menu-button" id="singlePlayerBtn">SINGLE PLAYER</button>
+            <button class="menu-button" id="multiPlayerBtn">MULTIPLAYER</button>
+            <button class="menu-button" id="unlimitedPlayerBtn">UNLIMITED</button>
+        </div>
+        <div id="playerSetupScreen" class="screen hidden">
+            <h1>PLAYER SETUP</h1>
+            <p class="instructions">Press any key to join (ESC to go back)</p>
+            <div id="playersList"></div>
+            <p class="instructions" style="margin-top: 30px;">Press ENTER to start</p>
+        </div>
+        <div id="startScreen" class="screen hidden">
+            <h1>FAP BIRD</h1>
+            <p>Press <span id="startKey">SPACE</span> to start</p>
+            <p class="instructions">Press <span id="flapKey">SPACE</span> to fap and fly!</p>
         </div>
         <div id="gameOverScreen" class="screen hidden">
             <h1>GAME OVER</h1>
             <p>Score: <span id="finalScore">0</span></p>
-            <p>Press SPACE to try again</p>
+            <p id="restartText">Press SPACE to try again</p>
         </div>
         <div id="score">0</div>
     </div>
-    <script src="game.js"></script>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const menuScreen = document.getElementById('menuScreen');
+        const playerSetupScreen = document.getElementById('playerSetupScreen');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const scoreDisplay = document.getElementById('score');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const singlePlayerBtn = document.getElementById('singlePlayerBtn');
+        const multiPlayerBtn = document.getElementById('multiPlayerBtn');
+        const unlimitedPlayerBtn = document.getElementById('unlimitedPlayerBtn');
+        const playersList = document.getElementById('playersList');
+
+        // Set canvas to full screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let gameState = 'menu'; // 'menu', 'playerSetup', 'start', 'playing', 'gameOver'
+        let gameMode = 'single'; // 'single', 'multi', or 'unlimited'
+        let gameOverTime = 0;
+        let score = 0;
+        let frames = 0;
+
+        // Player management
+        let players = [];
+        let usedKeys = new Set();
+
+        // Create bird function
+        function createBird(key, color = '#FFD700', viewportHeight = 900) {
+            // Initialize penis segments for rope physics
+            const numSegments = 6; // Number of segments for rope simulation
+            const penisSegments = [];
+            for (let i = 0; i < numSegments; i++) {
+                penisSegments.push({
+                    angle: Math.PI / 2, // Start straight down
+                    angularVel: 0,
+                    x: 0,
+                    y: 0
+                });
+            }
+
+            return {
+                key: key,
+                color: color,
+                x: 150,
+                y: viewportHeight * 0.44, // Proportional to viewport
+                width: 60,
+                height: 45,
+                velocity: 0,
+                gravity: 0.32,
+                jumpForce: -7,
+                rotation: 0,
+                penisLength: 15,
+                penisSegments: penisSegments, // Multi-segment rope
+                penisJiggle: 0,
+                ballsAngle: Math.PI / 2,
+                ballsAngularVel: 0,
+                ballsJiggle: 0,
+                score: 0,
+                pipes: [],
+                particles: [],
+                gameOverReason: 'normal',
+                alive: true,
+                gameState: 'playing', // individual game state for unlimited mode
+                gameOverTime: 0
+            };
+        }
+
+        // Game constants
+        const pipeWidth = 90;
+        const pipeGap = 250;
+        const pipeSpeed = 3;
+
+        // Clouds
+        const clouds = [];
+        for (let i = 0; i < 5; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * (canvas.height * 0.4),
+                width: Math.random() * 100 + 80,
+                height: Math.random() * 40 + 30,
+                speed: Math.random() * 0.3 + 0.2
+            });
+        }
+
+        // Sound generation using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playFapSound() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        function playScoreSound() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.15);
+        }
+
+        function playGameOverSound() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.5);
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
+
+        // Create jizz particles
+        function createParticles(bird) {
+            const tipPos = getPenisTipPosition(bird);
+            for (let i = 0; i < 20; i++) {
+                bird.particles.push({
+                    x: tipPos.x,
+                    y: tipPos.y,
+                    vx: Math.random() * 5 - 2.5,
+                    vy: Math.random() * 4 + 3,
+                    size: Math.random() * 9 + 5,
+                    life: 1,
+                    decay: Math.random() * 0.02 + 0.02
+                });
+            }
+
+            // Add impulse to all penis segments when flapping (creates wave effect)
+            for (let i = 0; i < bird.penisSegments.length; i++) {
+                const multiplier = (i + 1) / bird.penisSegments.length; // More effect on later segments
+                bird.penisSegments[i].angularVel += 0.2 * multiplier * multiplier; // Exponential for more whip effect
+            }
+
+            // Balls swing harder
+            bird.ballsAngularVel += 0.3;
+        }
+
+        // Update and draw particles
+        function updateParticles(bird) {
+            for (let i = bird.particles.length - 1; i >= 0; i--) {
+                const p = bird.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2; // gravity
+                p.life -= p.decay;
+
+                if (p.life <= 0) {
+                    bird.particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles(bird) {
+            bird.particles.forEach(p => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Add slight shading
+                ctx.fillStyle = `rgba(240, 240, 255, ${p.life * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Update rope physics for penis and balls
+        function updateJiggle(bird) {
+            // Multi-segment rope physics for penis
+            const basePenisLength = 15;
+            const totalPenisLength = bird.penisLength + basePenisLength;
+            const numSegments = bird.penisSegments.length;
+            const segmentLength = totalPenisLength / numSegments;
+
+            const gravity = 0.6;
+            const damping = 0.95;
+            const maxAngleDiff = Math.PI / 4; // Limit bending between segments (45 degrees)
+
+            // Add force from bird's movement
+            const birdAcceleration = bird.velocity - (bird.lastVelocity || 0);
+            bird.lastVelocity = bird.velocity;
+
+            // Update each segment with physics
+            for (let i = 0; i < numSegments; i++) {
+                const segment = bird.penisSegments[i];
+
+                // Gravity effect on this segment
+                const angularAcc = (-gravity / segmentLength) * Math.sin(segment.angle);
+
+                // Add bird movement influence
+                segment.angularVel += angularAcc;
+                segment.angularVel += birdAcceleration * (0.025 * (i + 1) / numSegments); // More effect on later segments
+
+                // Add small natural wobble
+                segment.angularVel += Math.sin(frames * 0.1 + i) * 0.002;
+
+                segment.angularVel *= damping;
+
+                // Apply velocity
+                segment.angle += segment.angularVel;
+
+                // Constrain to reasonable range
+                const maxAngle = Math.PI * 0.85;
+                const minAngle = Math.PI * 0.15;
+                if (segment.angle > maxAngle) {
+                    segment.angle = maxAngle;
+                    segment.angularVel *= -0.3;
+                }
+                if (segment.angle < minAngle) {
+                    segment.angle = minAngle;
+                    segment.angularVel *= -0.3;
+                }
+
+                // Constrain relative to previous segment (creates rope-like bending limits)
+                if (i > 0) {
+                    const prevSegment = bird.penisSegments[i - 1];
+                    const angleDiff = segment.angle - prevSegment.angle;
+
+                    if (Math.abs(angleDiff) > maxAngleDiff) {
+                        // Limit the angle difference
+                        segment.angle = prevSegment.angle + Math.sign(angleDiff) * maxAngleDiff;
+                        segment.angularVel *= 0.5; // Dampen when constrained
+                    }
+                }
+            }
+
+            // Calculate segment positions for drawing
+            let currentX = 0;
+            let currentY = bird.height / 2;
+
+            for (let i = 0; i < numSegments; i++) {
+                const segment = bird.penisSegments[i];
+                segment.x = currentX;
+                segment.y = currentY;
+
+                // Move to next segment position
+                currentX += Math.sin(segment.angle) * segmentLength;
+                currentY += Math.cos(segment.angle) * segmentLength;
+            }
+
+            // Balls physics (similar but simpler)
+            const ballsLength = 8;
+            const ballsAngularAcc = (-gravity / ballsLength) * Math.sin(bird.ballsAngle);
+
+            bird.ballsAngularVel += ballsAngularAcc;
+            bird.ballsAngularVel += birdAcceleration * 0.03;
+            bird.ballsAngularVel *= 0.94;
+            bird.ballsAngle += bird.ballsAngularVel;
+
+            // Constrain balls angle
+            const maxAngle = Math.PI * 0.85;
+            const minAngle = Math.PI * 0.15;
+            if (bird.ballsAngle > maxAngle) {
+                bird.ballsAngle = maxAngle;
+                bird.ballsAngularVel *= -0.4;
+            }
+            if (bird.ballsAngle < minAngle) {
+                bird.ballsAngle = minAngle;
+                bird.ballsAngularVel *= -0.4;
+            }
+
+            // Jiggle for visual effect (minimal now since we have rope physics)
+            bird.penisJiggle = Math.sin(frames * 0.3) * 0.5;
+            bird.ballsJiggle = Math.sin(frames * 0.4) * 0.3;
+        }
+
+        // Draw bird
+        function drawBird(bird) {
+            ctx.save();
+            ctx.translate(bird.x + bird.width / 2, bird.y + bird.height / 2);
+            ctx.rotate(bird.rotation);
+
+            const penisWidth = 8;
+            const ballRadius = 8;
+
+            // Calculate rope physics positions
+            const ballsLength = 8; // Shorter - closer to body
+            const ballsAttachY = bird.height / 2; // Same as penis attachment
+            const ballsX = Math.sin(bird.ballsAngle) * ballsLength;
+            const ballsY = Math.cos(bird.ballsAngle) * ballsLength + ballsAttachY;
+
+            // Balls (draw behind everything) - using rope physics
+            ctx.fillStyle = '#FFB6C1';
+            // Left ball
+            ctx.beginPath();
+            ctx.arc(ballsX - ballRadius, ballsY, ballRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#FF69B4';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Right ball
+            ctx.beginPath();
+            ctx.arc(ballsX + ballRadius, ballsY, ballRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw multi-segment curved penis
+            const basePenisLength = 15;
+            const totalPenisLength = bird.penisLength + basePenisLength;
+            const numSegments = bird.penisSegments.length;
+            const segmentLength = totalPenisLength / numSegments;
+
+            // Draw each segment as a curved rope
+            for (let i = 0; i < numSegments; i++) {
+                const segment = bird.penisSegments[i];
+
+                ctx.save();
+                ctx.translate(segment.x, segment.y);
+                ctx.rotate(segment.angle - Math.PI / 2);
+
+                // Draw segment body
+                ctx.fillStyle = '#FFB6C1';
+                ctx.fillRect(-penisWidth / 2, 0, penisWidth, segmentLength);
+                ctx.strokeStyle = '#FF69B4';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-penisWidth / 2, 0, penisWidth, segmentLength);
+
+                ctx.restore();
+
+                // Draw joint circles to smooth transitions between segments
+                if (i < numSegments - 1) {
+                    const nextX = segment.x + Math.sin(segment.angle) * segmentLength;
+                    const nextY = segment.y + Math.cos(segment.angle) * segmentLength;
+
+                    ctx.fillStyle = '#FFB6C1';
+                    ctx.strokeStyle = '#FF69B4';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(nextX, nextY, penisWidth / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+
+            // Draw penis tip at the end of the last segment
+            const lastSegment = bird.penisSegments[numSegments - 1];
+            const tipX = lastSegment.x + Math.sin(lastSegment.angle) * segmentLength;
+            const tipY = lastSegment.y + Math.cos(lastSegment.angle) * segmentLength;
+
+            ctx.fillStyle = '#FF69B4';
+            ctx.beginPath();
+            ctx.arc(tipX, tipY, penisWidth / 2 + 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Bird body
+            ctx.fillStyle = bird.color;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, bird.width / 2, bird.height / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Bird outline
+            ctx.strokeStyle = '#FFA500';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Eye
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(bird.width / 4, -bird.height / 6, 9, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(bird.width / 4 + 3, -bird.height / 6, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Beak
+            ctx.fillStyle = '#FF6347';
+            ctx.beginPath();
+            ctx.moveTo(bird.width / 2, 0);
+            ctx.lineTo(bird.width / 2 + 15, -5);
+            ctx.lineTo(bird.width / 2 + 15, 5);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Get penis tip position
+        function getPenisTipPosition(bird) {
+            const centerX = bird.x + bird.width / 2;
+            const centerY = bird.y + bird.height / 2;
+
+            // Get the last segment's end position
+            const basePenisLength = 15;
+            const totalPenisLength = bird.penisLength + basePenisLength;
+            const numSegments = bird.penisSegments.length;
+            const segmentLength = totalPenisLength / numSegments;
+
+            const lastSegment = bird.penisSegments[numSegments - 1];
+
+            // Calculate tip position from last segment
+            const localX = lastSegment.x + Math.sin(lastSegment.angle) * segmentLength;
+            const localY = lastSegment.y + Math.cos(lastSegment.angle) * segmentLength;
+
+            // Rotate based on bird rotation
+            const rotatedX = centerX + localX * Math.cos(bird.rotation) + localY * Math.sin(bird.rotation);
+            const rotatedY = centerY - localX * Math.sin(bird.rotation) + localY * Math.cos(bird.rotation);
+
+            return { x: rotatedX, y: rotatedY };
+        }
+
+        // Create pipe
+        function createPipe(bird, viewportWidth, viewportHeight) {
+            const minHeight = 50;
+            const maxHeight = viewportHeight - pipeGap - minHeight - 100;
+            const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
+
+            bird.pipes.push({
+                x: viewportWidth,
+                topHeight: topHeight,
+                scored: false
+            });
+        }
+
+        // Draw pipes
+        function drawPipes(bird, viewportHeight) {
+            bird.pipes.forEach(pipe => {
+                // Top pipe
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+
+                // Pipe cap (top)
+                ctx.fillRect(pipe.x - 8, pipe.topHeight - 30, pipeWidth + 16, 30);
+                ctx.strokeRect(pipe.x - 8, pipe.topHeight - 30, pipeWidth + 16, 30);
+
+                // Bottom pipe
+                const bottomY = pipe.topHeight + pipeGap;
+                const bottomHeight = viewportHeight - bottomY;
+                ctx.fillRect(pipe.x, bottomY, pipeWidth, bottomHeight);
+                ctx.strokeRect(pipe.x, bottomY, pipeWidth, bottomHeight);
+
+                // Pipe cap (bottom)
+                ctx.fillRect(pipe.x - 8, bottomY, pipeWidth + 16, 30);
+                ctx.strokeRect(pipe.x - 8, bottomY, pipeWidth + 16, 30);
+            });
+        }
+
+        // Update pipes
+        function updatePipes(bird, viewportWidth, viewportHeight) {
+            if (frames % 150 === 0) {
+                createPipe(bird, viewportWidth, viewportHeight);
+            }
+
+            for (let i = bird.pipes.length - 1; i >= 0; i--) {
+                bird.pipes[i].x -= pipeSpeed;
+
+                // Score when passing pipe
+                if (!bird.pipes[i].scored && bird.pipes[i].x + pipeWidth < bird.x) {
+                    bird.pipes[i].scored = true;
+                    bird.score++;
+                    playScoreSound();
+
+                    // Grow penis with each passed pipe
+                    bird.penisLength += 5;
+                }
+
+                // Remove off-screen pipes
+                if (bird.pipes[i].x + pipeWidth < 0) {
+                    bird.pipes.splice(i, 1);
+                }
+            }
+        }
+
+        // Collision detection
+        function checkCollision(bird, viewportHeight) {
+            // Ground and ceiling - body collision
+            if (bird.y + bird.height > viewportHeight || bird.y < 0) {
+                bird.gameOverReason = 'normal';
+                return true;
+            }
+
+            const penisWidth = 8;
+            const centerX = bird.x + bird.width / 2;
+            const centerY = bird.y + bird.height / 2;
+
+            // Pipes
+            for (let pipe of bird.pipes) {
+                // Body collision
+                if (bird.x + bird.width > pipe.x && bird.x < pipe.x + pipeWidth) {
+                    if (bird.y < pipe.topHeight || bird.y + bird.height > pipe.topHeight + pipeGap) {
+                        bird.gameOverReason = 'normal';
+                        return true;
+                    }
+                }
+
+                // Penis collision - check each segment
+                const basePenisLength = 15;
+                const totalPenisLength = bird.penisLength + basePenisLength;
+                const numSegments = bird.penisSegments.length;
+                const segmentLength = totalPenisLength / numSegments;
+
+                for (let i = 0; i < numSegments; i++) {
+                    const segment = bird.penisSegments[i];
+
+                    // Check segment start
+                    const startX = centerX + segment.x * Math.cos(bird.rotation) + segment.y * Math.sin(bird.rotation);
+                    const startY = centerY - segment.x * Math.sin(bird.rotation) + segment.y * Math.cos(bird.rotation);
+
+                    // Check segment end
+                    const endLocalX = segment.x + Math.sin(segment.angle) * segmentLength;
+                    const endLocalY = segment.y + Math.cos(segment.angle) * segmentLength;
+                    const endX = centerX + endLocalX * Math.cos(bird.rotation) + endLocalY * Math.sin(bird.rotation);
+                    const endY = centerY - endLocalX * Math.sin(bird.rotation) + endLocalY * Math.cos(bird.rotation);
+
+                    // Check if either end of segment hits pipe
+                    if (startX + penisWidth > pipe.x && startX - penisWidth < pipe.x + pipeWidth) {
+                        if (startY < pipe.topHeight || startY > pipe.topHeight + pipeGap) {
+                            bird.gameOverReason = 'raper';
+                            return true;
+                        }
+                    }
+
+                    if (endX + penisWidth > pipe.x && endX - penisWidth < pipe.x + pipeWidth) {
+                        if (endY < pipe.topHeight || endY > pipe.topHeight + pipeGap) {
+                            bird.gameOverReason = 'raper';
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Update bird
+        function updateBird(bird) {
+            bird.velocity += bird.gravity;
+            bird.y += bird.velocity;
+
+            // Update rotation based on velocity
+            bird.rotation = Math.min(Math.max(bird.velocity * 0.05, -0.5), 0.8);
+        }
+
+        // Draw sun
+        function drawSun() {
+            const sunX = canvas.width - 120;
+            const sunY = 100;
+            const sunRadius = 50;
+
+            // Sun glow
+            const sunGradient = ctx.createRadialGradient(sunX, sunY, sunRadius * 0.5, sunX, sunY, sunRadius * 1.5);
+            sunGradient.addColorStop(0, 'rgba(255, 255, 100, 0.4)');
+            sunGradient.addColorStop(1, 'rgba(255, 255, 100, 0)');
+            ctx.fillStyle = sunGradient;
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, sunRadius * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sun body
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sun highlight
+            ctx.fillStyle = 'rgba(255, 255, 150, 0.6)';
+            ctx.beginPath();
+            ctx.arc(sunX - 15, sunY - 15, sunRadius * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw and update clouds
+        function drawClouds() {
+            clouds.forEach(cloud => {
+                cloud.x -= cloud.speed;
+                if (cloud.x + cloud.width < 0) {
+                    cloud.x = canvas.width;
+                    cloud.y = Math.random() * (canvas.height * 0.4);
+                }
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+
+                // Draw cloud with multiple circles for fluffy effect
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.height * 0.5, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.width * 0.3, cloud.y - cloud.height * 0.2, cloud.height * 0.6, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.width * 0.6, cloud.y, cloud.height * 0.5, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.width * 0.8, cloud.y + cloud.height * 0.1, cloud.height * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Draw ground details
+        function drawGround(viewportWidth, viewportHeight) {
+            const groundY = viewportHeight / 2;
+
+            // Grass texture
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(0, groundY, viewportWidth, viewportHeight - groundY);
+
+            // Grass layer
+            ctx.fillStyle = '#9FBF3B';
+            ctx.fillRect(0, groundY, viewportWidth, 40);
+
+            // Grass blades
+            ctx.strokeStyle = '#7A9B2D';
+            ctx.lineWidth = 3;
+            for (let x = 0; x < viewportWidth + 20; x += 20) {
+                const offset = (x - frames * 2) % (viewportWidth + 40);
+                for (let i = 0; i < 3; i++) {
+                    const grassX = offset + i * 7;
+                    ctx.beginPath();
+                    ctx.moveTo(grassX, groundY + 40);
+                    ctx.lineTo(grassX + Math.sin((frames + grassX) * 0.05) * 3, groundY + 25);
+                    ctx.stroke();
+                }
+            }
+
+            // Dirt details
+            ctx.fillStyle = '#6B5344';
+            for (let i = 0; i < 30; i++) {
+                const x = ((i * 50 - frames * 1.5) % (viewportWidth + 50) + viewportWidth + 50) % (viewportWidth + 50);
+                const y = groundY + 60 + Math.sin(i) * 20;
+                ctx.fillRect(x, y, 8, 8);
+                ctx.fillRect(x + 15, y + 10, 6, 6);
+            }
+
+            // Ground stripe pattern
+            ctx.fillStyle = '#7D6651';
+            for (let y = groundY + 100; y < viewportHeight; y += 60) {
+                ctx.fillRect(0, y, viewportWidth, 20);
+            }
+        }
+
+        // Calculate viewport for player
+        function getViewport(playerIndex, totalPlayers) {
+            const vp = { x: 0, y: 0, width: canvas.width, height: canvas.height };
+
+            if (totalPlayers === 1) {
+                return vp;
+            }
+
+            // Always split vertically - divide screen into vertical columns
+            vp.width = canvas.width / totalPlayers;
+            vp.height = canvas.height;
+            vp.x = playerIndex * vp.width;
+            vp.y = 0;
+
+            return vp;
+        }
+
+        // Draw player viewport
+        function drawPlayerViewport(bird, playerIndex) {
+            const vp = getViewport(playerIndex, players.length);
+
+            // Set clipping region
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(vp.x, vp.y, vp.width, vp.height);
+            ctx.clip();
+
+            // Translate to viewport
+            ctx.translate(vp.x, vp.y);
+
+            // Draw sky gradient
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, vp.height / 2);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(0.6, '#B0E0E6');
+            skyGradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, vp.width, vp.height / 2);
+
+            // Draw sun (scaled)
+            const sunScale = vp.width / canvas.width;
+            drawSun();
+
+            // Draw clouds (scaled)
+            drawClouds();
+
+            // Draw ground
+            drawGround(vp.width, vp.height);
+
+            // Draw game objects
+            drawPipes(bird, vp.height);
+            drawParticles(bird);
+            drawBird(bird);
+
+            // Draw score for this player
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 4;
+            ctx.strokeText(bird.score, vp.width / 2, 60);
+            ctx.fillText(bird.score, vp.width / 2, 60);
+
+            // Draw player indicator
+            ctx.font = 'bold 24px Arial';
+            ctx.strokeText(`P${playerIndex + 1}: ${bird.key.toUpperCase()}`, vp.width / 2, 90);
+            ctx.fillText(`P${playerIndex + 1}: ${bird.key.toUpperCase()}`, vp.width / 2, 90);
+
+            // Draw game over overlay for this player in unlimited mode
+            if (gameMode === 'unlimited' && bird.gameState === 'gameOver') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, vp.width, vp.height);
+
+                ctx.fillStyle = '#ff69b4';
+                ctx.font = 'bold 60px Arial';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 4;
+
+                const title = bird.gameOverReason === 'raper' ? 'YOU RAPER' : 'GAME OVER';
+                ctx.strokeText(title, vp.width / 2, vp.height / 2 - 50);
+                ctx.fillText(title, vp.width / 2, vp.height / 2 - 50);
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 36px Arial';
+                ctx.strokeText(`Score: ${bird.score}`, vp.width / 2, vp.height / 2 + 20);
+                ctx.fillText(`Score: ${bird.score}`, vp.width / 2, vp.height / 2 + 20);
+
+                const timeSinceDeath = Date.now() - bird.gameOverTime;
+                const restartMsg = timeSinceDeath < 1000 ? 'Wait...' : `Press ${bird.key.toUpperCase()}`;
+                ctx.font = 'bold 28px Arial';
+                ctx.strokeText(restartMsg, vp.width / 2, vp.height / 2 + 70);
+                ctx.fillText(restartMsg, vp.width / 2, vp.height / 2 + 70);
+            }
+
+            ctx.restore();
+
+            // Draw thin vertical divider lines between players
+            if (players.length > 1 && playerIndex < players.length - 1) {
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(vp.x + vp.width, vp.y);
+                ctx.lineTo(vp.x + vp.width, vp.y + vp.height);
+                ctx.stroke();
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameMode === 'single' && players.length > 0) {
+                // Single player - 30% width, centered
+                const gameWidth = canvas.width * 0.3;
+                const gameHeight = canvas.height;
+                const offsetX = (canvas.width - gameWidth) / 2;
+
+                // Fill background
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Set clipping region for game area
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(offsetX, 0, gameWidth, gameHeight);
+                ctx.clip();
+
+                // Translate to game area
+                ctx.translate(offsetX, 0);
+
+                // Draw sky gradient
+                const skyGradient = ctx.createLinearGradient(0, 0, 0, gameHeight / 2);
+                skyGradient.addColorStop(0, '#87CEEB');
+                skyGradient.addColorStop(0.6, '#B0E0E6');
+                skyGradient.addColorStop(1, '#E0F6FF');
+                ctx.fillStyle = skyGradient;
+                ctx.fillRect(0, 0, gameWidth, gameHeight / 2);
+
+                drawSun();
+                drawClouds();
+                drawGround(gameWidth, gameHeight);
+
+                if (gameState === 'playing') {
+                    frames++;
+                    const bird = players[0];
+                    if (bird.alive) {
+                        updateBird(bird);
+                        updatePipes(bird, gameWidth, gameHeight);
+                        updateParticles(bird);
+                        updateJiggle(bird);
+
+                        // Update score display
+                        scoreDisplay.textContent = bird.score;
+
+                        if (checkCollision(bird, gameHeight)) {
+                            bird.alive = false;
+                            gameState = 'gameOver';
+                            gameOverTime = Date.now();
+                            gameOverScreen.classList.remove('hidden');
+
+                            const gameOverTitle = document.querySelector('#gameOverScreen h1');
+                            if (bird.gameOverReason === 'raper') {
+                                gameOverTitle.textContent = 'YOU RAPER';
+                            } else {
+                                gameOverTitle.textContent = 'GAME OVER';
+                            }
+
+                            finalScoreDisplay.textContent = bird.score;
+                            playGameOverSound();
+
+                            // Update restart text with cooldown
+                            const restartText = document.getElementById('restartText');
+                            restartText.textContent = 'Wait...';
+                            setTimeout(() => {
+                                restartText.textContent = `Press ${bird.key.toUpperCase()} to try again`;
+                            }, 1000);
+                        }
+                    }
+                } else {
+                    updateJiggle(players[0]);
+                }
+
+                drawPipes(players[0], gameHeight);
+                drawParticles(players[0]);
+                drawBird(players[0]);
+
+                ctx.restore();
+            } else if ((gameMode === 'multi' || gameMode === 'unlimited') && players.length > 0) {
+                // Multiplayer - split screen
+                if (gameMode === 'unlimited') {
+                    // Unlimited mode - each player independent
+                    frames++;
+                    players.forEach((bird, index) => {
+                        const vp = getViewport(index, players.length);
+                        if (bird.gameState === 'playing' && bird.alive) {
+                            updateBird(bird);
+                            updatePipes(bird, vp.width, vp.height);
+                            updateParticles(bird);
+                            updateJiggle(bird);
+
+                            if (checkCollision(bird, vp.height)) {
+                                bird.alive = false;
+                                bird.gameState = 'gameOver';
+                                bird.gameOverTime = Date.now();
+                            }
+                        } else {
+                            updateJiggle(bird);
+                        }
+                    });
+
+                    // Draw each player's viewport
+                    players.forEach((bird, index) => {
+                        drawPlayerViewport(bird, index);
+                    });
+                } else {
+                    // Regular multiplayer - all players together
+                    if (gameState === 'playing') {
+                        frames++;
+
+                        let allDead = true;
+                        players.forEach((bird, index) => {
+                            const vp = getViewport(index, players.length);
+                            if (bird.alive) {
+                                allDead = false;
+                                updateBird(bird);
+                                updatePipes(bird, vp.width, vp.height);
+                                updateParticles(bird);
+                                updateJiggle(bird);
+
+                                if (checkCollision(bird, vp.height)) {
+                                    bird.alive = false;
+                                }
+                            }
+                        });
+
+                        // Check if all players are dead
+                        if (allDead) {
+                            gameState = 'gameOver';
+                            gameOverTime = Date.now();
+                            gameOverScreen.classList.remove('hidden');
+
+                            // Find winner
+                            let winner = players[0];
+                            players.forEach(bird => {
+                                if (bird.score > winner.score) {
+                                    winner = bird;
+                                }
+                            });
+
+                            const gameOverTitle = document.querySelector('#gameOverScreen h1');
+                            gameOverTitle.textContent = `PLAYER ${players.indexOf(winner) + 1} WINS!`;
+                            finalScoreDisplay.textContent = winner.score;
+                            playGameOverSound();
+
+                            // Update restart text with cooldown
+                            const restartText = document.getElementById('restartText');
+                            restartText.textContent = 'Wait...';
+                            setTimeout(() => {
+                                restartText.textContent = 'Press ENTER to try again';
+                            }, 1000);
+                        }
+                    } else {
+                        players.forEach(bird => updateJiggle(bird));
+                    }
+
+                    // Draw each player's viewport
+                    players.forEach((bird, index) => {
+                        drawPlayerViewport(bird, index);
+                    });
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Menu button handlers
+        singlePlayerBtn.addEventListener('click', () => {
+            gameMode = 'single';
+            gameState = 'start';
+            menuScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            scoreDisplay.style.display = 'block';
+            // Single player uses 30% width
+            const bird = createBird('Space', '#FFD700', canvas.height);
+            bird.x = (canvas.width * 0.3) * 0.1875; // Position bird relative to game area
+            players = [bird];
+            document.getElementById('startKey').textContent = 'SPACE';
+            document.getElementById('flapKey').textContent = 'SPACE';
+        });
+
+        multiPlayerBtn.addEventListener('click', () => {
+            gameMode = 'multi';
+            gameState = 'playerSetup';
+            menuScreen.classList.add('hidden');
+            playerSetupScreen.classList.remove('hidden');
+            scoreDisplay.style.display = 'none';
+            players = [];
+            usedKeys.clear();
+            updatePlayersList();
+        });
+
+        unlimitedPlayerBtn.addEventListener('click', () => {
+            gameMode = 'unlimited';
+            gameState = 'playerSetup';
+            menuScreen.classList.add('hidden');
+            playerSetupScreen.classList.remove('hidden');
+            scoreDisplay.style.display = 'none';
+            players = [];
+            usedKeys.clear();
+            updatePlayersList();
+        });
+
+        // Update players list display
+        function updatePlayersList() {
+            playersList.innerHTML = '';
+            const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
+            const maxPlayers = gameMode === 'unlimited' ? 8 : 4;
+
+            if (players.length === 0) {
+                playersList.innerHTML = '<p class="player-setup">No players yet...</p>';
+            } else {
+                players.forEach((player, index) => {
+                    const p = document.createElement('p');
+                    p.className = 'player-setup player-joined';
+                    p.textContent = `Player ${index + 1}: ${player.key.toUpperCase()}`;
+                    p.style.color = colors[index % colors.length];
+                    playersList.appendChild(p);
+                });
+            }
+
+            if (players.length < maxPlayers) {
+                const p = document.createElement('p');
+                p.className = 'player-setup';
+                p.style.color = '#aaa';
+                p.textContent = 'Press any key to join...';
+                playersList.appendChild(p);
+            }
+        }
+
+        // Reset game function
+        function resetGame() {
+            if (gameMode === 'single') {
+                const key = players[0].key;
+                const color = players[0].color;
+                const bird = createBird(key, color, canvas.height);
+                bird.x = (canvas.width * 0.3) * 0.1875; // Position bird relative to game area
+                players = [bird];
+            } else {
+                const playerData = players.map((p, index) => ({
+                    key: p.key,
+                    color: p.color,
+                    vp: getViewport(index, players.length)
+                }));
+                players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
+            }
+            score = 0;
+            frames = 0;
+        }
+
+        // Handle input
+        document.addEventListener('keydown', (e) => {
+            if (gameState === 'playerSetup') {
+                e.preventDefault();
+                if (e.code === 'Escape') {
+                    // Go back to menu
+                    playerSetupScreen.classList.add('hidden');
+                    menuScreen.classList.remove('hidden');
+                    players = [];
+                    usedKeys.clear();
+                } else if (e.code === 'Enter') {
+                    if (players.length > 0) {
+                        // Start game
+                        gameState = 'start';
+                        playerSetupScreen.classList.add('hidden');
+                        startScreen.classList.remove('hidden');
+                        document.getElementById('startKey').textContent = 'ANY PLAYER KEY';
+                        document.getElementById('flapKey').textContent = 'YOUR KEY';
+                    }
+                } else {
+                    // Add player
+                    const maxPlayers = gameMode === 'unlimited' ? 8 : 4;
+                    if (players.length < maxPlayers && !usedKeys.has(e.code)) {
+                        const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
+                        // Use a default height for now, will be updated when game starts
+                        const bird = createBird(e.code, colors[players.length % colors.length], 900);
+                        players.push(bird);
+                        usedKeys.add(e.code);
+                        updatePlayersList();
+                        playScoreSound();
+                    }
+                }
+            } else if (gameState === 'start') {
+                // Check if any player pressed their key
+                const player = players.find(p => p.key === e.code);
+                if (player || (gameMode === 'single' && e.code === 'Space')) {
+                    e.preventDefault();
+                    gameState = 'playing';
+                    startScreen.classList.add('hidden');
+
+                    // Reinitialize birds with correct viewport positions
+                    if (gameMode !== 'single') {
+                        const playerData = players.map((p, index) => ({
+                            key: p.key,
+                            color: p.color,
+                            vp: getViewport(index, players.length)
+                        }));
+                        players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
+                    }
+
+                    players.forEach(bird => {
+                        bird.velocity = bird.jumpForce;
+                        bird.gameState = 'playing';
+                        createParticles(bird);
+                    });
+                    playFapSound();
+                }
+            } else if (gameState === 'playing') {
+                // Each player controls their bird
+                if (gameMode === 'unlimited') {
+                    // Unlimited mode - check individual game states
+                    players.forEach((bird, index) => {
+                        if (bird.key === e.code) {
+                            e.preventDefault();
+                            if (bird.gameState === 'playing' && bird.alive) {
+                                // Playing - flap
+                                bird.velocity = bird.jumpForce;
+                                createParticles(bird);
+                                playFapSound();
+                            } else if (bird.gameState === 'gameOver') {
+                                // Dead - restart this player
+                                const timeSinceDeath = Date.now() - bird.gameOverTime;
+                                if (timeSinceDeath >= 1000) {
+                                    // Reset this bird
+                                    const key = bird.key;
+                                    const color = bird.color;
+                                    const vp = getViewport(index, players.length);
+                                    players[index] = createBird(key, color, vp.height);
+                                    players[index].velocity = players[index].jumpForce;
+                                    createParticles(players[index]);
+                                    playFapSound();
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    // Regular multiplayer
+                    players.forEach(bird => {
+                        if (bird.key === e.code && bird.alive) {
+                            e.preventDefault();
+                            bird.velocity = bird.jumpForce;
+                            createParticles(bird);
+                            playFapSound();
+                        }
+                    });
+                }
+            } else if (gameState === 'gameOver') {
+                // Check cooldown (1 second)
+                const timeSinceDeath = Date.now() - gameOverTime;
+                if (timeSinceDeath < 1000) {
+                    return; // Still in cooldown
+                }
+
+                // Restart game
+                if (gameMode === 'single' && e.code === players[0].key) {
+                    e.preventDefault();
+                    gameState = 'playing';
+                    gameOverScreen.classList.add('hidden');
+                    resetGame();
+                    players[0].velocity = players[0].jumpForce;
+                    createParticles(players[0]);
+                    playFapSound();
+                } else if (gameMode === 'multi' && e.code === 'Enter') {
+                    e.preventDefault();
+                    gameState = 'playing';
+                    gameOverScreen.classList.add('hidden');
+                    resetGame();
+                    players.forEach(bird => {
+                        bird.velocity = bird.jumpForce;
+                        createParticles(bird);
+                    });
+                    playFapSound();
+                }
+            }
+        });
+
+        // Start game loop
+        gameLoop();
+    </script>
 </body>
 </html>
