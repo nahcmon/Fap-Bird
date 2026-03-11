@@ -13,6 +13,12 @@
             box-sizing: border-box;
         }
 
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -22,6 +28,10 @@
             touch-action: none;
             -webkit-user-select: none;
             user-select: none;
+            width: 100%;
+            min-height: var(--app-height, 100vh);
+            min-height: 100dvh;
+            overscroll-behavior: none;
         }
 
         .game-container {
@@ -29,7 +39,8 @@
             top: 0;
             left: 0;
             width: 100vw;
-            height: 100vh;
+            height: var(--app-height, 100vh);
+            height: 100dvh;
         }
 
         #gameCanvas {
@@ -38,6 +49,7 @@
             height: 100%;
             background: linear-gradient(to bottom, #4ec0ca 0%, #87ceeb 50%, #deb887 50%, #d2b48c 100%);
             touch-action: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .screen {
@@ -53,6 +65,12 @@
             background: rgba(0, 0, 0, 0.7);
             color: white;
             z-index: 10;
+            padding:
+                calc(24px + env(safe-area-inset-top))
+                calc(20px + env(safe-area-inset-right))
+                calc(24px + env(safe-area-inset-bottom))
+                calc(20px + env(safe-area-inset-left));
+            text-align: center;
         }
 
         .screen.hidden {
@@ -60,26 +78,28 @@
         }
 
         .screen h1 {
-            font-size: 96px;
+            font-size: clamp(56px, 14vw, 96px);
             margin-bottom: 30px;
             text-shadow: 4px 4px 0 #000;
             color: #ff69b4;
+            line-height: 0.95;
         }
 
         .screen p {
-            font-size: 36px;
+            font-size: clamp(20px, 5vw, 36px);
             margin: 15px 0;
             text-shadow: 2px 2px 0 #000;
+            max-width: 28rem;
         }
 
         .instructions {
-            font-size: 28px !important;
+            font-size: clamp(16px, 4vw, 28px) !important;
             color: #ffeb3b;
         }
 
         .menu-button {
-            font-size: 48px;
-            padding: 20px 40px;
+            font-size: clamp(24px, 5vw, 48px);
+            padding: clamp(16px, 4vw, 20px) clamp(24px, 8vw, 40px);
             margin: 20px;
             background: linear-gradient(to bottom, #ff69b4, #ff1493);
             border: 4px solid white;
@@ -88,11 +108,15 @@
             cursor: pointer;
             border-radius: 10px;
             transition: transform 0.2s;
+            width: min(100%, 22rem);
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .menu-button:hover {
-            transform: scale(1.1);
-            background: linear-gradient(to bottom, #ff1493, #ff69b4);
+        @media (hover: hover) {
+            .menu-button:hover {
+                transform: scale(1.1);
+                background: linear-gradient(to bottom, #ff1493, #ff69b4);
+            }
         }
 
         .player-setup {
@@ -107,26 +131,32 @@
 
         #score {
             position: absolute;
-            top: 30px;
+            top: calc(18px + env(safe-area-inset-top));
             left: 50%;
             transform: translateX(-50%);
-            font-size: 72px;
+            font-size: clamp(48px, 13vw, 72px);
             font-weight: bold;
             color: white;
             text-shadow: 3px 3px 0 #000;
             z-index: 5;
             pointer-events: none;
         }
+
+        .mobile-note {
+            color: #ffd166;
+            max-width: 24rem;
+        }
     </style>
 </head>
 <body>
-    <div class="game-container">
+    <div class="game-container" id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="menuScreen" class="screen">
             <h1>FAP BIRD</h1>
             <button class="menu-button" id="singlePlayerBtn">SINGLE PLAYER</button>
             <button class="menu-button" id="multiPlayerBtn">MULTIPLAYER</button>
             <button class="menu-button" id="unlimitedPlayerBtn">UNLIMITED</button>
+            <p id="mobileModeNotice" class="instructions mobile-note" hidden>Mobile uses fullscreen single player only.</p>
         </div>
         <div id="playerSetupScreen" class="screen hidden">
             <h1>PLAYER SETUP</h1>
@@ -136,8 +166,8 @@
         </div>
         <div id="startScreen" class="screen hidden">
             <h1>FAP BIRD</h1>
-            <p>Press <span id="startKey">SPACE</span> or TAP to start</p>
-            <p class="instructions">Press <span id="flapKey">SPACE</span> or TAP to fap and fly!</p>
+            <p id="startPrompt">Press SPACE or TAP to start</p>
+            <p id="flapPrompt" class="instructions">Press SPACE or TAP to fap and fly!</p>
         </div>
         <div id="gameOverScreen" class="screen hidden">
             <h1>GAME OVER</h1>
@@ -150,6 +180,7 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('gameContainer');
         const menuScreen = document.getElementById('menuScreen');
         const playerSetupScreen = document.getElementById('playerSetupScreen');
         const startScreen = document.getElementById('startScreen');
@@ -160,14 +191,29 @@
         const multiPlayerBtn = document.getElementById('multiPlayerBtn');
         const unlimitedPlayerBtn = document.getElementById('unlimitedPlayerBtn');
         const playersList = document.getElementById('playersList');
+        const mobileModeNotice = document.getElementById('mobileModeNotice');
+        const startPrompt = document.getElementById('startPrompt');
+        const flapPrompt = document.getElementById('flapPrompt');
+        const restartText = document.getElementById('restartText');
 
         // Set canvas to full screen
+        function setAppHeight() {
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        }
+
         function resizeCanvas() {
+            setAppHeight();
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
         resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+
+        function detectMobileLayout() {
+            const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+            const compactWidth = window.innerWidth <= 900;
+            const touchFriendlyHeight = Math.min(window.innerWidth, window.innerHeight) <= 1100;
+            return compactWidth || (hasCoarsePointer && touchFriendlyHeight);
+        }
 
         // Game state
         let gameState = 'menu'; // 'menu', 'playerSetup', 'start', 'playing', 'gameOver'
@@ -175,10 +221,92 @@
         let gameOverTime = 0;
         let score = 0;
         let frames = 0;
+        let isMobileLayout = detectMobileLayout();
 
         // Player management
         let players = [];
         let usedKeys = new Set();
+
+        function getSinglePlayerViewport() {
+            if (isMobileLayout) {
+                return { x: 0, y: 0, width: canvas.width, height: canvas.height };
+            }
+
+            const width = canvas.width * 0.3;
+            return {
+                x: (canvas.width - width) / 2,
+                y: 0,
+                width: width,
+                height: canvas.height
+            };
+        }
+
+        function getSinglePlayerBirdX(viewportWidth) {
+            const ratio = isMobileLayout ? 0.22 : 0.1875;
+            return Math.max(72, viewportWidth * ratio);
+        }
+
+        function positionSinglePlayerBird(bird, preserveHeight = false) {
+            if (!bird) {
+                return;
+            }
+
+            const viewport = getSinglePlayerViewport();
+            const previousHeight = bird.viewportHeight || viewport.height;
+            const proportionalY = preserveHeight
+                ? (bird.y / previousHeight) * viewport.height
+                : viewport.height * 0.44;
+
+            bird.x = getSinglePlayerBirdX(viewport.width);
+            bird.y = Math.min(Math.max(proportionalY, 0), viewport.height - bird.height);
+            bird.viewportHeight = viewport.height;
+        }
+
+        function updateControlText() {
+            if (gameMode === 'single') {
+                startPrompt.textContent = isMobileLayout ? 'Tap to start' : 'Press SPACE or TAP to start';
+                flapPrompt.textContent = isMobileLayout ? 'Tap anywhere to fap and fly!' : 'Press SPACE or TAP to fap and fly!';
+                restartText.textContent = isMobileLayout ? 'Tap to try again' : 'Press SPACE or TAP to try again';
+                return;
+            }
+
+            startPrompt.textContent = 'Press any player key to start';
+            flapPrompt.textContent = 'Each player uses their own key.';
+            restartText.textContent = gameMode === 'multi'
+                ? 'Press ENTER or TAP to try again'
+                : 'Tap your lane to rejoin';
+        }
+
+        function forceMenuState() {
+            gameState = 'menu';
+            gameMode = 'single';
+            players = [];
+            usedKeys.clear();
+            scoreDisplay.style.display = 'none';
+            menuScreen.classList.remove('hidden');
+            playerSetupScreen.classList.add('hidden');
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+        }
+
+        function updateResponsiveState({ fromResize = false } = {}) {
+            const wasMobileLayout = isMobileLayout;
+            isMobileLayout = detectMobileLayout();
+
+            multiPlayerBtn.hidden = isMobileLayout;
+            unlimitedPlayerBtn.hidden = isMobileLayout;
+            mobileModeNotice.hidden = !isMobileLayout;
+
+            if (isMobileLayout && (gameMode === 'multi' || gameMode === 'unlimited' || gameState === 'playerSetup')) {
+                forceMenuState();
+            }
+
+            if (players.length > 0 && (gameMode === 'single' || (fromResize && wasMobileLayout !== isMobileLayout))) {
+                positionSinglePlayerBird(players[0], true);
+            }
+
+            updateControlText();
+        }
 
         // Create bird function
         function createBird(key, color = '#FFD700', viewportHeight = 900) {
@@ -217,7 +345,8 @@
                 gameOverReason: 'normal',
                 alive: true,
                 gameState: 'playing', // individual game state for unlimited mode
-                gameOverTime: 0
+                gameOverTime: 0,
+                viewportHeight: viewportHeight
             };
         }
 
@@ -240,6 +369,12 @@
 
         // Sound generation using Web Audio API
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function unlockAudio() {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+        }
 
         function playFapSound() {
             const oscillator = audioContext.createOscillator();
@@ -921,10 +1056,10 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (gameMode === 'single' && players.length > 0) {
-                // Single player - 30% width, centered
-                const gameWidth = canvas.width * 0.3;
-                const gameHeight = canvas.height;
-                const offsetX = (canvas.width - gameWidth) / 2;
+                const singleViewport = getSinglePlayerViewport();
+                const gameWidth = singleViewport.width;
+                const gameHeight = singleViewport.height;
+                const offsetX = singleViewport.x;
 
                 // Fill background
                 ctx.fillStyle = '#000';
@@ -980,11 +1115,9 @@
                             playGameOverSound();
 
                             // Update restart text with cooldown
-                            const restartText = document.getElementById('restartText');
-                            restartText.textContent = 'Wait...';
-                            setTimeout(() => {
-                                restartText.textContent = `Press ${bird.key.toUpperCase()} or TAP to try again`;
-                            }, 1000);
+                            setGameOverCooldownText(
+                                isMobileLayout ? 'Tap to try again' : `Press ${bird.key.toUpperCase()} or TAP to try again`
+                            );
                         }
                     }
                 } else {
@@ -1064,11 +1197,7 @@
                             playGameOverSound();
 
                             // Update restart text with cooldown
-                            const restartText = document.getElementById('restartText');
-                            restartText.textContent = 'Wait...';
-                            setTimeout(() => {
-                                restartText.textContent = 'Press ENTER or TAP to try again';
-                            }, 1000);
+                            setGameOverCooldownText('Press ENTER or TAP to try again');
                         }
                     } else {
                         players.forEach(bird => updateJiggle(bird));
@@ -1084,22 +1213,207 @@
             requestAnimationFrame(gameLoop);
         }
 
+        function setGameOverCooldownText(nextText) {
+            restartText.textContent = 'Wait...';
+            setTimeout(() => {
+                if (gameState === 'gameOver') {
+                    restartText.textContent = nextText;
+                }
+            }, 1000);
+        }
+
+        function startCurrentRound() {
+            unlockAudio();
+            gameState = 'playing';
+            startScreen.classList.add('hidden');
+
+            if (gameMode !== 'single') {
+                const playerData = players.map((p, index) => ({
+                    key: p.key,
+                    color: p.color,
+                    vp: getViewport(index, players.length)
+                }));
+                players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
+            } else {
+                positionSinglePlayerBird(players[0]);
+            }
+
+            players.forEach(bird => {
+                bird.velocity = bird.jumpForce;
+                bird.gameState = 'playing';
+                createParticles(bird);
+            });
+            playFapSound();
+        }
+
+        function flapBird(bird) {
+            if (!bird || !bird.alive) {
+                return;
+            }
+
+            unlockAudio();
+            bird.velocity = bird.jumpForce;
+            createParticles(bird);
+            playFapSound();
+        }
+
+        function restartSinglePlayerRound() {
+            unlockAudio();
+            gameState = 'playing';
+            gameOverScreen.classList.add('hidden');
+            resetGame();
+            players[0].velocity = players[0].jumpForce;
+            createParticles(players[0]);
+            playFapSound();
+        }
+
+        function restartMultiplayerRound() {
+            unlockAudio();
+            gameState = 'playing';
+            gameOverScreen.classList.add('hidden');
+            resetGame();
+            players.forEach(bird => {
+                bird.velocity = bird.jumpForce;
+                createParticles(bird);
+            });
+            playFapSound();
+        }
+
+        function handleTouchGameInput(clientX, clientY) {
+            if (gameState === 'menu' || gameState === 'playerSetup' || players.length === 0) {
+                return false;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const touchX = clientX - rect.left;
+            const touchY = clientY - rect.top;
+
+            if (gameState === 'start') {
+                startCurrentRound();
+                return true;
+            }
+
+            if (gameState === 'playing') {
+                if (gameMode === 'single') {
+                    flapBird(players[0]);
+                    return true;
+                }
+
+                if (gameMode === 'unlimited') {
+                    for (let index = 0; index < players.length; index++) {
+                        const bird = players[index];
+                        const vp = getViewport(index, players.length);
+                        if (touchX >= vp.x && touchX < vp.x + vp.width &&
+                            touchY >= vp.y && touchY < vp.y + vp.height) {
+                            if (bird.gameState === 'playing' && bird.alive) {
+                                flapBird(bird);
+                                return true;
+                            }
+
+                            if (bird.gameState === 'gameOver') {
+                                const timeSinceDeath = Date.now() - bird.gameOverTime;
+                                if (timeSinceDeath >= 1000) {
+                                    const key = bird.key;
+                                    const color = bird.color;
+                                    players[index] = createBird(key, color, vp.height);
+                                    unlockAudio();
+                                    players[index].velocity = players[index].jumpForce;
+                                    createParticles(players[index]);
+                                    playFapSound();
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                for (let index = 0; index < players.length; index++) {
+                    const bird = players[index];
+                    const vp = getViewport(index, players.length);
+                    if (touchX >= vp.x && touchX < vp.x + vp.width &&
+                        touchY >= vp.y && touchY < vp.y + vp.height && bird.alive) {
+                        flapBird(bird);
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            if (gameState === 'gameOver') {
+                const timeSinceDeath = Date.now() - gameOverTime;
+                if (timeSinceDeath < 1000) {
+                    return false;
+                }
+
+                if (gameMode === 'single') {
+                    restartSinglePlayerRound();
+                    return true;
+                }
+
+                if (gameMode === 'multi') {
+                    restartMultiplayerRound();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function renderGameToText() {
+            const singleViewport = getSinglePlayerViewport();
+            return JSON.stringify({
+                coordinates: 'origin top-left; x increases right; y increases down',
+                gameState: gameState,
+                gameMode: gameMode,
+                layout: isMobileLayout ? 'mobile-fullscreen' : 'desktop-centered',
+                activeArea: gameMode === 'single'
+                    ? singleViewport
+                    : { x: 0, y: 0, width: canvas.width, height: canvas.height },
+                players: players.map((bird, index) => ({
+                    index: index + 1,
+                    key: bird.key,
+                    alive: bird.alive,
+                    state: bird.gameState,
+                    x: bird.x,
+                    y: bird.y,
+                    velocity: bird.velocity,
+                    score: bird.score,
+                    nextPipe: bird.pipes[0]
+                        ? { x: bird.pipes[0].x, topHeight: bird.pipes[0].topHeight }
+                        : null
+                })),
+                menu: {
+                    single: !singlePlayerBtn.hidden,
+                    multi: !multiPlayerBtn.hidden,
+                    unlimited: !unlimitedPlayerBtn.hidden
+                }
+            });
+        }
+
+        window.render_game_to_text = renderGameToText;
+
         // Menu button handlers
         singlePlayerBtn.addEventListener('click', () => {
+            unlockAudio();
             gameMode = 'single';
             gameState = 'start';
             menuScreen.classList.add('hidden');
             startScreen.classList.remove('hidden');
             scoreDisplay.style.display = 'block';
-            // Single player uses 30% width
-            const bird = createBird('Space', '#FFD700', canvas.height);
-            bird.x = (canvas.width * 0.3) * 0.1875; // Position bird relative to game area
+            const bird = createBird('Space', '#FFD700', getSinglePlayerViewport().height);
+            positionSinglePlayerBird(bird);
             players = [bird];
-            document.getElementById('startKey').textContent = 'SPACE';
-            document.getElementById('flapKey').textContent = 'SPACE';
+            updateControlText();
         });
 
         multiPlayerBtn.addEventListener('click', () => {
+            if (isMobileLayout) {
+                return;
+            }
+
+            unlockAudio();
             gameMode = 'multi';
             gameState = 'playerSetup';
             menuScreen.classList.add('hidden');
@@ -1111,6 +1425,11 @@
         });
 
         unlimitedPlayerBtn.addEventListener('click', () => {
+            if (isMobileLayout) {
+                return;
+            }
+
+            unlockAudio();
             gameMode = 'unlimited';
             gameState = 'playerSetup';
             menuScreen.classList.add('hidden');
@@ -1153,8 +1472,8 @@
             if (gameMode === 'single') {
                 const key = players[0].key;
                 const color = players[0].color;
-                const bird = createBird(key, color, canvas.height);
-                bird.x = (canvas.width * 0.3) * 0.1875; // Position bird relative to game area
+                const bird = createBird(key, color, getSinglePlayerViewport().height);
+                positionSinglePlayerBird(bird);
                 players = [bird];
             } else {
                 const playerData = players.map((p, index) => ({
@@ -1174,18 +1493,15 @@
                 e.preventDefault();
                 if (e.code === 'Escape') {
                     // Go back to menu
-                    playerSetupScreen.classList.add('hidden');
-                    menuScreen.classList.remove('hidden');
-                    players = [];
-                    usedKeys.clear();
+                    forceMenuState();
+                    updateResponsiveState();
                 } else if (e.code === 'Enter') {
                     if (players.length > 0) {
                         // Start game
                         gameState = 'start';
                         playerSetupScreen.classList.add('hidden');
                         startScreen.classList.remove('hidden');
-                        document.getElementById('startKey').textContent = 'ANY PLAYER KEY';
-                        document.getElementById('flapKey').textContent = 'YOUR KEY';
+                        updateControlText();
                     }
                 } else {
                     // Add player
@@ -1205,25 +1521,7 @@
                 const player = players.find(p => p.key === e.code);
                 if (player || (gameMode === 'single' && e.code === 'Space')) {
                     e.preventDefault();
-                    gameState = 'playing';
-                    startScreen.classList.add('hidden');
-
-                    // Reinitialize birds with correct viewport positions
-                    if (gameMode !== 'single') {
-                        const playerData = players.map((p, index) => ({
-                            key: p.key,
-                            color: p.color,
-                            vp: getViewport(index, players.length)
-                        }));
-                        players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
-                    }
-
-                    players.forEach(bird => {
-                        bird.velocity = bird.jumpForce;
-                        bird.gameState = 'playing';
-                        createParticles(bird);
-                    });
-                    playFapSound();
+                    startCurrentRound();
                 }
             } else if (gameState === 'playing') {
                 // Each player controls their bird
@@ -1234,9 +1532,7 @@
                             e.preventDefault();
                             if (bird.gameState === 'playing' && bird.alive) {
                                 // Playing - flap
-                                bird.velocity = bird.jumpForce;
-                                createParticles(bird);
-                                playFapSound();
+                                flapBird(bird);
                             } else if (bird.gameState === 'gameOver') {
                                 // Dead - restart this player
                                 const timeSinceDeath = Date.now() - bird.gameOverTime;
@@ -1246,6 +1542,7 @@
                                     const color = bird.color;
                                     const vp = getViewport(index, players.length);
                                     players[index] = createBird(key, color, vp.height);
+                                    unlockAudio();
                                     players[index].velocity = players[index].jumpForce;
                                     createParticles(players[index]);
                                     playFapSound();
@@ -1258,9 +1555,7 @@
                     players.forEach(bird => {
                         if (bird.key === e.code && bird.alive) {
                             e.preventDefault();
-                            bird.velocity = bird.jumpForce;
-                            createParticles(bird);
-                            playFapSound();
+                            flapBird(bird);
                         }
                     });
                 }
@@ -1274,145 +1569,59 @@
                 // Restart game
                 if (gameMode === 'single' && e.code === players[0].key) {
                     e.preventDefault();
-                    gameState = 'playing';
-                    gameOverScreen.classList.add('hidden');
-                    resetGame();
-                    players[0].velocity = players[0].jumpForce;
-                    createParticles(players[0]);
-                    playFapSound();
+                    restartSinglePlayerRound();
                 } else if (gameMode === 'multi' && e.code === 'Enter') {
                     e.preventDefault();
-                    gameState = 'playing';
-                    gameOverScreen.classList.add('hidden');
-                    resetGame();
-                    players.forEach(bird => {
-                        bird.velocity = bird.jumpForce;
-                        createParticles(bird);
-                    });
-                    playFapSound();
+                    restartMultiplayerRound();
                 }
             }
         });
 
-        // Touch support for mobile devices
-        let touchHandled = false;
+        function onTouchPointerDown(e) {
+            if (e.pointerType !== 'touch' || e.target.closest('button')) {
+                return;
+            }
 
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            touchHandled = false;
+            if (handleTouchGameInput(e.clientX, e.clientY)) {
+                e.preventDefault();
+            }
+        }
+
+        function onLegacyTouchStart(e) {
+            if (e.target.closest('button')) {
+                return;
+            }
 
             const touch = e.touches[0];
-            const rect = canvas.getBoundingClientRect();
-            const touchX = touch.clientX - rect.left;
-            const touchY = touch.clientY - rect.top;
-
-            if (gameState === 'start') {
-                // Start the game on touch
-                gameState = 'playing';
-                startScreen.classList.add('hidden');
-
-                // Reinitialize birds with correct viewport positions
-                if (gameMode !== 'single') {
-                    const playerData = players.map((p, index) => ({
-                        key: p.key,
-                        color: p.color,
-                        vp: getViewport(index, players.length)
-                    }));
-                    players = playerData.map(pd => createBird(pd.key, pd.color, pd.vp.height));
-                }
-
-                players.forEach(bird => {
-                    bird.velocity = bird.jumpForce;
-                    bird.gameState = 'playing';
-                    createParticles(bird);
-                });
-                playFapSound();
-                touchHandled = true;
-            } else if (gameState === 'playing') {
-                if (gameMode === 'single') {
-                    // Single player - any touch makes bird flap
-                    const bird = players[0];
-                    if (bird.alive) {
-                        bird.velocity = bird.jumpForce;
-                        createParticles(bird);
-                        playFapSound();
-                        touchHandled = true;
-                    }
-                } else if (gameMode === 'unlimited') {
-                    // Unlimited mode - touch in player's viewport
-                    players.forEach((bird, index) => {
-                        const vp = getViewport(index, players.length);
-                        if (touchX >= vp.x && touchX < vp.x + vp.width &&
-                            touchY >= vp.y && touchY < vp.y + vp.height) {
-
-                            if (bird.gameState === 'playing' && bird.alive) {
-                                // Playing - flap
-                                bird.velocity = bird.jumpForce;
-                                createParticles(bird);
-                                playFapSound();
-                                touchHandled = true;
-                            } else if (bird.gameState === 'gameOver') {
-                                // Dead - restart this player
-                                const timeSinceDeath = Date.now() - bird.gameOverTime;
-                                if (timeSinceDeath >= 1000) {
-                                    const key = bird.key;
-                                    const color = bird.color;
-                                    players[index] = createBird(key, color, vp.height);
-                                    players[index].velocity = players[index].jumpForce;
-                                    createParticles(players[index]);
-                                    playFapSound();
-                                    touchHandled = true;
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    // Regular multiplayer - touch in player's viewport
-                    players.forEach((bird, index) => {
-                        const vp = getViewport(index, players.length);
-                        if (touchX >= vp.x && touchX < vp.x + vp.width &&
-                            touchY >= vp.y && touchY < vp.y + vp.height && bird.alive) {
-                            bird.velocity = bird.jumpForce;
-                            createParticles(bird);
-                            playFapSound();
-                            touchHandled = true;
-                        }
-                    });
-                }
-            } else if (gameState === 'gameOver') {
-                // Check cooldown (1 second)
-                const timeSinceDeath = Date.now() - gameOverTime;
-                if (timeSinceDeath >= 1000) {
-                    if (gameMode === 'single') {
-                        gameState = 'playing';
-                        gameOverScreen.classList.add('hidden');
-                        resetGame();
-                        players[0].velocity = players[0].jumpForce;
-                        createParticles(players[0]);
-                        playFapSound();
-                        touchHandled = true;
-                    } else if (gameMode === 'multi') {
-                        gameState = 'playing';
-                        gameOverScreen.classList.add('hidden');
-                        resetGame();
-                        players.forEach(bird => {
-                            bird.velocity = bird.jumpForce;
-                            createParticles(bird);
-                        });
-                        playFapSound();
-                        touchHandled = true;
-                    }
-                }
+            if (touch && handleTouchGameInput(touch.clientX, touch.clientY)) {
+                e.preventDefault();
             }
-        });
+        }
 
-        // Prevent default touch behaviors to avoid scrolling
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-        });
+        if (window.PointerEvent) {
+            gameContainer.addEventListener('pointerdown', onTouchPointerDown, { passive: false });
+        } else {
+            gameContainer.addEventListener('touchstart', onLegacyTouchStart, { passive: false });
+        }
 
-        canvas.addEventListener('touchend', (e) => {
+        gameContainer.addEventListener('touchmove', (e) => {
+            if (e.target.closest('button')) {
+                return;
+            }
             e.preventDefault();
+        }, { passive: false });
+
+        gameContainer.addEventListener('touchend', (e) => {
+            if (e.target.closest('button')) {
+                return;
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        updateResponsiveState();
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            updateResponsiveState({ fromResize: true });
         });
 
         // Start game loop
