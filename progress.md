@@ -9,6 +9,11 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Mobile now switches to a fullscreen single-player layout on narrow viewports and touch-first devices.
 - Touch handling moved to the game container so start and game-over overlays can respond to taps.
 - Mobile hides `MULTIPLAYER` and `UNLIMITED` instead of trying to support keyboard join flows on phones.
+- Added a local `favicon.svg` and linked it from `index.html`.
+- The requested `imagegen` flow is prepared and dry-run validated, but live generation is blocked in this session because `OPENAI_API_KEY` is not set.
+- Replaced the old angle-based anatomy chain with a constrained rope made of linked points so tip position, drawing, particles, and collisions all share the same geometry.
 - Verification:
 - Desktop regression pass with the bundled Playwright game client completed successfully against `http://127.0.0.1:4173/index.html`.
 - Mobile-sized browser checks confirmed the mobile menu hides extra modes and shows fullscreen single-player copy.
+- Post-change regression pass completed again after the rope-physics update; gameplay screenshots show the chain bending as a rope.
+- `curl -I http://127.0.0.1:4173/favicon.svg` returned `200 OK`, and the page head now points to `./favicon.svg`.

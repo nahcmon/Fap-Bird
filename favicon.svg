@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fap Bird favicon">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#8ad8ea" />
+      <stop offset="1" stop-color="#4eb7d6" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#sky)" />
+  <ellipse cx="30" cy="28" rx="18" ry="15" fill="#ffd447" stroke="#d38d00" stroke-width="3" />
+  <path d="M43 28 L56 24 L56 32 Z" fill="#ff7b54" stroke="#d84f29" stroke-width="2.5" stroke-linejoin="round" />
+  <circle cx="39" cy="25" r="5.8" fill="#fffdf8" />
+  <circle cx="40.6" cy="24.8" r="2.7" fill="#111" />
+  <path d="M26 39
+           C28 44, 33 46, 34 51
+           C35 55, 32 57, 30 55" fill="none" stroke="#ff5bac" stroke-width="5" stroke-linecap="round" />
+  <circle cx="31" cy="56" r="3.6" fill="#ff5bac" />
+</svg>

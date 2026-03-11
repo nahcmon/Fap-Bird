@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link rel="shortcut icon" href="./favicon.svg">
     <title>Fap Bird</title>
     <style>
         * {
@@ -226,6 +228,9 @@
         // Player management
         let players = [];
         let usedKeys = new Set();
+        const penisBaseLength = 15;
+        const penisSegmentCount = 8;
+        const penisConstraintIterations = 7;
 
         function getSinglePlayerViewport() {
             if (isMobileLayout) {
@@ -308,21 +313,60 @@
             updateControlText();
         }
 
-        // Create bird function
-        function createBird(key, color = '#FFD700', viewportHeight = 900) {
-            // Initialize penis segments for rope physics
-            const numSegments = 6; // Number of segments for rope simulation
-            const penisSegments = [];
-            for (let i = 0; i < numSegments; i++) {
-                penisSegments.push({
-                    angle: Math.PI / 2, // Start straight down
-                    angularVel: 0,
-                    x: 0,
-                    y: 0
+        function syncPenisSegmentsFromNodes(bird) {
+            for (let i = 0; i < bird.penisSegments.length; i++) {
+                const start = bird.penisNodes[i];
+                const end = bird.penisNodes[i + 1];
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.hypot(dx, dy) || 0.0001;
+                const segment = bird.penisSegments[i];
+
+                segment.x = start.x;
+                segment.y = start.y;
+                segment.endX = end.x;
+                segment.endY = end.y;
+                segment.length = length;
+                segment.renderAngle = Math.atan2(dy, dx) - Math.PI / 2;
+            }
+        }
+
+        function resetPenisRope(bird) {
+            const totalPenisLength = bird.penisLength + penisBaseLength;
+            const segmentLength = totalPenisLength / bird.penisSegments.length;
+            const baseX = 0;
+            const baseY = bird.height / 2;
+
+            bird.penisNodes = [];
+            for (let i = 0; i <= bird.penisSegments.length; i++) {
+                const x = baseX;
+                const y = baseY + segmentLength * i;
+                bird.penisNodes.push({
+                    x: x,
+                    y: y,
+                    prevX: x,
+                    prevY: y
                 });
             }
 
-            return {
+            syncPenisSegmentsFromNodes(bird);
+        }
+
+        // Create bird function
+        function createBird(key, color = '#FFD700', viewportHeight = 900) {
+            const penisSegments = [];
+            for (let i = 0; i < penisSegmentCount; i++) {
+                penisSegments.push({
+                    x: 0,
+                    y: 0,
+                    endX: 0,
+                    endY: 0,
+                    length: 0,
+                    renderAngle: 0
+                });
+            }
+
+            const bird = {
                 key: key,
                 color: color,
                 x: 150,
@@ -346,8 +390,14 @@
                 alive: true,
                 gameState: 'playing', // individual game state for unlimited mode
                 gameOverTime: 0,
-                viewportHeight: viewportHeight
+                viewportHeight: viewportHeight,
+                penisNodes: [],
+                lastVelocity: 0,
+                lastRotation: 0
             };
+
+            resetPenisRope(bird);
+            return bird;
         }
 
         // Game constants
@@ -441,10 +491,13 @@
                 });
             }
 
-            // Add impulse to all penis segments when flapping (creates wave effect)
-            for (let i = 0; i < bird.penisSegments.length; i++) {
-                const multiplier = (i + 1) / bird.penisSegments.length; // More effect on later segments
-                bird.penisSegments[i].angularVel += 0.2 * multiplier * multiplier; // Exponential for more whip effect
+            // Kick the rope by offsetting historical positions, which creates a whip-like lag.
+            for (let i = 1; i < bird.penisNodes.length; i++) {
+                const node = bird.penisNodes[i];
+                const influence = i / (bird.penisNodes.length - 1);
+                const kick = influence * influence;
+                node.prevX -= 1.8 * kick;
+                node.prevY += 5 * kick;
             }
 
             // Balls swing harder
@@ -483,77 +536,80 @@
 
         // Update rope physics for penis and balls
         function updateJiggle(bird) {
-            // Multi-segment rope physics for penis
-            const basePenisLength = 15;
-            const totalPenisLength = bird.penisLength + basePenisLength;
+            const totalPenisLength = bird.penisLength + penisBaseLength;
             const numSegments = bird.penisSegments.length;
             const segmentLength = totalPenisLength / numSegments;
+            const gravity = 0.55;
+            const damping = 0.9;
+            const birdAcceleration = bird.velocity - bird.lastVelocity;
+            const rotationDelta = bird.rotation - bird.lastRotation;
 
-            const gravity = 0.6;
-            const damping = 0.95;
-            const maxAngleDiff = Math.PI / 4; // Limit bending between segments (45 degrees)
-
-            // Add force from bird's movement
-            const birdAcceleration = bird.velocity - (bird.lastVelocity || 0);
             bird.lastVelocity = bird.velocity;
+            bird.lastRotation = bird.rotation;
 
-            // Update each segment with physics
-            for (let i = 0; i < numSegments; i++) {
-                const segment = bird.penisSegments[i];
+            if (bird.penisNodes.length !== numSegments + 1) {
+                resetPenisRope(bird);
+            }
 
-                // Gravity effect on this segment
-                const angularAcc = (-gravity / segmentLength) * Math.sin(segment.angle);
+            // Anchor the rope to the body and feed body movement into the rope via Verlet history.
+            const baseNode = bird.penisNodes[0];
+            baseNode.x = 0;
+            baseNode.y = bird.height / 2;
+            baseNode.prevX = baseNode.x;
+            baseNode.prevY = baseNode.y;
 
-                // Add bird movement influence
-                segment.angularVel += angularAcc;
-                segment.angularVel += birdAcceleration * (0.025 * (i + 1) / numSegments); // More effect on later segments
+            for (let i = 1; i < bird.penisNodes.length; i++) {
+                const node = bird.penisNodes[i];
+                const influence = i / (bird.penisNodes.length - 1);
+                const bodySway = birdAcceleration * influence * 0.45;
+                const rotationSway = rotationDelta * 14 * influence;
 
-                // Add small natural wobble
-                segment.angularVel += Math.sin(frames * 0.1 + i) * 0.002;
+                node.prevX -= rotationSway + bodySway;
+                node.prevY -= birdAcceleration * influence * 0.7;
 
-                segment.angularVel *= damping;
+                const velocityX = (node.x - node.prevX) * damping;
+                const velocityY = (node.y - node.prevY) * damping;
+                node.prevX = node.x;
+                node.prevY = node.y;
 
-                // Apply velocity
-                segment.angle += segment.angularVel;
+                node.x += velocityX + Math.sin(frames * 0.05 + i) * 0.06;
+                node.y += velocityY + gravity + Math.cos(frames * 0.04 + i) * 0.04;
+            }
 
-                // Constrain to reasonable range
-                const maxAngle = Math.PI * 0.85;
-                const minAngle = Math.PI * 0.15;
-                if (segment.angle > maxAngle) {
-                    segment.angle = maxAngle;
-                    segment.angularVel *= -0.3;
-                }
-                if (segment.angle < minAngle) {
-                    segment.angle = minAngle;
-                    segment.angularVel *= -0.3;
-                }
+            for (let iteration = 0; iteration < penisConstraintIterations; iteration++) {
+                bird.penisNodes[0].x = 0;
+                bird.penisNodes[0].y = bird.height / 2;
 
-                // Constrain relative to previous segment (creates rope-like bending limits)
-                if (i > 0) {
-                    const prevSegment = bird.penisSegments[i - 1];
-                    const angleDiff = segment.angle - prevSegment.angle;
+                for (let i = 0; i < bird.penisNodes.length - 1; i++) {
+                    const start = bird.penisNodes[i];
+                    const end = bird.penisNodes[i + 1];
+                    const dx = end.x - start.x;
+                    const dy = end.y - start.y;
+                    const distance = Math.hypot(dx, dy) || 0.0001;
+                    const difference = (distance - segmentLength) / distance;
 
-                    if (Math.abs(angleDiff) > maxAngleDiff) {
-                        // Limit the angle difference
-                        segment.angle = prevSegment.angle + Math.sign(angleDiff) * maxAngleDiff;
-                        segment.angularVel *= 0.5; // Dampen when constrained
+                    if (i === 0) {
+                        end.x -= dx * difference;
+                        end.y -= dy * difference;
+                    } else {
+                        start.x += dx * difference * 0.5;
+                        start.y += dy * difference * 0.5;
+                        end.x -= dx * difference * 0.5;
+                        end.y -= dy * difference * 0.5;
                     }
                 }
+
+                // Soften sharp kinks so the chain reads like a rope instead of rigid bars.
+                for (let i = 1; i < bird.penisNodes.length - 1; i++) {
+                    const prev = bird.penisNodes[i - 1];
+                    const current = bird.penisNodes[i];
+                    const next = bird.penisNodes[i + 1];
+                    current.x += ((prev.x + next.x) * 0.5 - current.x) * 0.08;
+                    current.y += (((prev.y + next.y) * 0.5 + 0.15) - current.y) * 0.04;
+                }
             }
 
-            // Calculate segment positions for drawing
-            let currentX = 0;
-            let currentY = bird.height / 2;
-
-            for (let i = 0; i < numSegments; i++) {
-                const segment = bird.penisSegments[i];
-                segment.x = currentX;
-                segment.y = currentY;
-
-                // Move to next segment position
-                currentX += Math.sin(segment.angle) * segmentLength;
-                currentY += Math.cos(segment.angle) * segmentLength;
-            }
+            syncPenisSegmentsFromNodes(bird);
 
             // Balls physics (similar but simpler)
             const ballsLength = 8;
@@ -613,47 +669,39 @@
             ctx.stroke();
 
             // Draw multi-segment curved penis
-            const basePenisLength = 15;
-            const totalPenisLength = bird.penisLength + basePenisLength;
-            const numSegments = bird.penisSegments.length;
-            const segmentLength = totalPenisLength / numSegments;
-
-            // Draw each segment as a curved rope
-            for (let i = 0; i < numSegments; i++) {
+            // Draw each segment as a constrained rope link.
+            for (let i = 0; i < bird.penisSegments.length; i++) {
                 const segment = bird.penisSegments[i];
 
                 ctx.save();
                 ctx.translate(segment.x, segment.y);
-                ctx.rotate(segment.angle - Math.PI / 2);
+                ctx.rotate(segment.renderAngle);
 
                 // Draw segment body
                 ctx.fillStyle = '#FFB6C1';
-                ctx.fillRect(-penisWidth / 2, 0, penisWidth, segmentLength);
+                ctx.fillRect(-penisWidth / 2, 0, penisWidth, segment.length);
                 ctx.strokeStyle = '#FF69B4';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(-penisWidth / 2, 0, penisWidth, segmentLength);
+                ctx.strokeRect(-penisWidth / 2, 0, penisWidth, segment.length);
 
                 ctx.restore();
 
                 // Draw joint circles to smooth transitions between segments
-                if (i < numSegments - 1) {
-                    const nextX = segment.x + Math.sin(segment.angle) * segmentLength;
-                    const nextY = segment.y + Math.cos(segment.angle) * segmentLength;
-
+                if (i < bird.penisSegments.length - 1) {
                     ctx.fillStyle = '#FFB6C1';
                     ctx.strokeStyle = '#FF69B4';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
-                    ctx.arc(nextX, nextY, penisWidth / 2, 0, Math.PI * 2);
+                    ctx.arc(segment.endX, segment.endY, penisWidth / 2, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.stroke();
                 }
             }
 
             // Draw penis tip at the end of the last segment
-            const lastSegment = bird.penisSegments[numSegments - 1];
-            const tipX = lastSegment.x + Math.sin(lastSegment.angle) * segmentLength;
-            const tipY = lastSegment.y + Math.cos(lastSegment.angle) * segmentLength;
+            const lastSegment = bird.penisSegments[bird.penisSegments.length - 1];
+            const tipX = lastSegment.endX;
+            const tipY = lastSegment.endY;
 
             ctx.fillStyle = '#FF69B4';
             ctx.beginPath();
@@ -698,18 +746,9 @@
         function getPenisTipPosition(bird) {
             const centerX = bird.x + bird.width / 2;
             const centerY = bird.y + bird.height / 2;
-
-            // Get the last segment's end position
-            const basePenisLength = 15;
-            const totalPenisLength = bird.penisLength + basePenisLength;
-            const numSegments = bird.penisSegments.length;
-            const segmentLength = totalPenisLength / numSegments;
-
-            const lastSegment = bird.penisSegments[numSegments - 1];
-
-            // Calculate tip position from last segment
-            const localX = lastSegment.x + Math.sin(lastSegment.angle) * segmentLength;
-            const localY = lastSegment.y + Math.cos(lastSegment.angle) * segmentLength;
+            const lastSegment = bird.penisSegments[bird.penisSegments.length - 1];
+            const localX = lastSegment.endX;
+            const localY = lastSegment.endY;
 
             // Rotate based on bird rotation
             const rotatedX = centerX + localX * Math.cos(bird.rotation) + localY * Math.sin(bird.rotation);
@@ -805,24 +844,16 @@
                     }
                 }
 
-                // Penis collision - check each segment
-                const basePenisLength = 15;
-                const totalPenisLength = bird.penisLength + basePenisLength;
-                const numSegments = bird.penisSegments.length;
-                const segmentLength = totalPenisLength / numSegments;
-
-                for (let i = 0; i < numSegments; i++) {
+                // Penis collision - check each rope link endpoint.
+                for (let i = 0; i < bird.penisSegments.length; i++) {
                     const segment = bird.penisSegments[i];
 
                     // Check segment start
                     const startX = centerX + segment.x * Math.cos(bird.rotation) + segment.y * Math.sin(bird.rotation);
                     const startY = centerY - segment.x * Math.sin(bird.rotation) + segment.y * Math.cos(bird.rotation);
 
-                    // Check segment end
-                    const endLocalX = segment.x + Math.sin(segment.angle) * segmentLength;
-                    const endLocalY = segment.y + Math.cos(segment.angle) * segmentLength;
-                    const endX = centerX + endLocalX * Math.cos(bird.rotation) + endLocalY * Math.sin(bird.rotation);
-                    const endY = centerY - endLocalX * Math.sin(bird.rotation) + endLocalY * Math.cos(bird.rotation);
+                    const endX = centerX + segment.endX * Math.cos(bird.rotation) + segment.endY * Math.sin(bird.rotation);
+                    const endY = centerY - segment.endX * Math.sin(bird.rotation) + segment.endY * Math.cos(bird.rotation);
 
                     // Check if either end of segment hits pipe
                     if (startX + penisWidth > pipe.x && startX - penisWidth < pipe.x + pipeWidth) {
