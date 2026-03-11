@@ -228,6 +228,10 @@
         // Player management
         let players = [];
         let usedKeys = new Set();
+        const singlePlayerWorld = {
+            width: 384,
+            height: 720
+        };
         const penisBaseLength = 15;
         const penisSegmentCount = 8;
         const penisConstraintIterations = 7;
@@ -247,8 +251,7 @@
         }
 
         function getSinglePlayerBirdX(viewportWidth) {
-            const ratio = isMobileLayout ? 0.22 : 0.1875;
-            return Math.max(72, viewportWidth * ratio);
+            return Math.max(72, viewportWidth * 0.1875);
         }
 
         function positionSinglePlayerBird(bird, preserveHeight = false) {
@@ -256,15 +259,14 @@
                 return;
             }
 
-            const viewport = getSinglePlayerViewport();
-            const previousHeight = bird.viewportHeight || viewport.height;
+            const previousHeight = bird.viewportHeight || singlePlayerWorld.height;
             const proportionalY = preserveHeight
-                ? (bird.y / previousHeight) * viewport.height
-                : viewport.height * 0.44;
+                ? (bird.y / previousHeight) * singlePlayerWorld.height
+                : singlePlayerWorld.height * 0.44;
 
-            bird.x = getSinglePlayerBirdX(viewport.width);
-            bird.y = Math.min(Math.max(proportionalY, 0), viewport.height - bird.height);
-            bird.viewportHeight = viewport.height;
+            bird.x = getSinglePlayerBirdX(singlePlayerWorld.width);
+            bird.y = Math.min(Math.max(proportionalY, 0), singlePlayerWorld.height - bird.height);
+            bird.viewportHeight = singlePlayerWorld.height;
         }
 
         function updateControlText() {
@@ -306,7 +308,7 @@
                 forceMenuState();
             }
 
-            if (players.length > 0 && (gameMode === 'single' || (fromResize && wasMobileLayout !== isMobileLayout))) {
+            if (players.length > 0 && gameMode === 'single' && !fromResize && wasMobileLayout !== isMobileLayout) {
                 positionSinglePlayerBird(players[0], true);
             }
 
@@ -419,61 +421,118 @@
 
         // Sound generation using Web Audio API
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let audioPrimed = false;
+        let pendingAudioResume = null;
 
         function unlockAudio() {
-            if (audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+            if (audioContext.state === 'suspended' && !pendingAudioResume) {
+                pendingAudioResume = audioContext.resume()
+                    .catch(() => {})
+                    .finally(() => {
+                        pendingAudioResume = null;
+                    });
+            }
+
+            if (audioPrimed || audioContext.state === 'closed') {
+                return;
+            }
+
+            try {
+                const buffer = audioContext.createBuffer(1, 1, 22050);
+                const source = audioContext.createBufferSource();
+                const gainNode = audioContext.createGain();
+
+                gainNode.gain.value = 0.00001;
+                source.buffer = buffer;
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                source.start(audioContext.currentTime);
+                source.stop(audioContext.currentTime + 0.001);
+                audioPrimed = true;
+            } catch (error) {
+                // Ignore priming failures and retry on the next user gesture.
+            }
+        }
+
+        function playSound(factory) {
+            unlockAudio();
+
+            const run = () => {
+                if (audioContext.state !== 'running') {
+                    return;
+                }
+
+                try {
+                    factory();
+                } catch (error) {
+                    // Ignore Web Audio failures for transient mobile/browser states.
+                }
+            };
+
+            if (audioContext.state === 'running') {
+                run();
+                return;
+            }
+
+            if (pendingAudioResume) {
+                pendingAudioResume.then(run);
             }
         }
 
         function playFapSound() {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            playSound(() => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
 
-            oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
 
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
 
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.1);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.1);
+            });
         }
 
         function playScoreSound() {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            playSound(() => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
 
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
 
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
 
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.15);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.15);
+            });
         }
 
         function playGameOverSound() {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            playSound(() => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
 
-            oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.5);
+                oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.5);
 
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
 
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            });
         }
 
         // Create jizz particles
@@ -885,8 +944,8 @@
         }
 
         // Draw sun
-        function drawSun() {
-            const sunX = canvas.width - 120;
+        function drawSun(viewportWidth) {
+            const sunX = viewportWidth - 120;
             const sunY = 100;
             const sunRadius = 50;
 
@@ -913,12 +972,15 @@
         }
 
         // Draw and update clouds
-        function drawClouds() {
+        function drawClouds(viewportWidth, viewportHeight) {
             clouds.forEach(cloud => {
+                if (cloud.x > viewportWidth + cloud.width) {
+                    cloud.x = cloud.x % (viewportWidth + cloud.width);
+                }
                 cloud.x -= cloud.speed;
                 if (cloud.x + cloud.width < 0) {
-                    cloud.x = canvas.width;
-                    cloud.y = Math.random() * (canvas.height * 0.4);
+                    cloud.x = viewportWidth;
+                    cloud.y = Math.random() * (viewportHeight * 0.4);
                 }
 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
@@ -1015,10 +1077,10 @@
 
             // Draw sun (scaled)
             const sunScale = vp.width / canvas.width;
-            drawSun();
+            drawSun(vp.width);
 
             // Draw clouds (scaled)
-            drawClouds();
+            drawClouds(vp.width, vp.height);
 
             // Draw ground
             drawGround(vp.width, vp.height);
@@ -1088,9 +1150,11 @@
 
             if (gameMode === 'single' && players.length > 0) {
                 const singleViewport = getSinglePlayerViewport();
-                const gameWidth = singleViewport.width;
-                const gameHeight = singleViewport.height;
+                const renderWidth = singleViewport.width;
+                const renderHeight = singleViewport.height;
                 const offsetX = singleViewport.x;
+                const gameWidth = singlePlayerWorld.width;
+                const gameHeight = singlePlayerWorld.height;
 
                 // Fill background
                 ctx.fillStyle = '#000';
@@ -1099,11 +1163,12 @@
                 // Set clipping region for game area
                 ctx.save();
                 ctx.beginPath();
-                ctx.rect(offsetX, 0, gameWidth, gameHeight);
+                ctx.rect(offsetX, 0, renderWidth, renderHeight);
                 ctx.clip();
 
                 // Translate to game area
                 ctx.translate(offsetX, 0);
+                ctx.scale(renderWidth / gameWidth, renderHeight / gameHeight);
 
                 // Draw sky gradient
                 const skyGradient = ctx.createLinearGradient(0, 0, 0, gameHeight / 2);
@@ -1113,8 +1178,8 @@
                 ctx.fillStyle = skyGradient;
                 ctx.fillRect(0, 0, gameWidth, gameHeight / 2);
 
-                drawSun();
-                drawClouds();
+                drawSun(gameWidth);
+                drawClouds(gameWidth, gameHeight);
                 drawGround(gameWidth, gameHeight);
 
                 if (gameState === 'playing') {
@@ -1402,6 +1467,7 @@
                 activeArea: gameMode === 'single'
                     ? singleViewport
                     : { x: 0, y: 0, width: canvas.width, height: canvas.height },
+                singlePlayerWorld: gameMode === 'single' ? singlePlayerWorld : null,
                 players: players.map((bird, index) => ({
                     index: index + 1,
                     key: bird.key,
@@ -1433,7 +1499,7 @@
             menuScreen.classList.add('hidden');
             startScreen.classList.remove('hidden');
             scoreDisplay.style.display = 'block';
-            const bird = createBird('Space', '#FFD700', getSinglePlayerViewport().height);
+            const bird = createBird('Space', '#FFD700', singlePlayerWorld.height);
             positionSinglePlayerBird(bird);
             players = [bird];
             updateControlText();
@@ -1503,7 +1569,7 @@
             if (gameMode === 'single') {
                 const key = players[0].key;
                 const color = players[0].color;
-                const bird = createBird(key, color, getSinglePlayerViewport().height);
+                const bird = createBird(key, color, singlePlayerWorld.height);
                 positionSinglePlayerBird(bird);
                 players = [bird];
             } else {
@@ -1520,6 +1586,8 @@
 
         // Handle input
         document.addEventListener('keydown', (e) => {
+            unlockAudio();
+
             if (gameState === 'playerSetup') {
                 e.preventDefault();
                 if (e.code === 'Escape') {
@@ -1609,7 +1677,13 @@
         });
 
         function onTouchPointerDown(e) {
-            if (e.pointerType !== 'touch' || e.target.closest('button')) {
+            if (e.pointerType !== 'touch') {
+                return;
+            }
+
+            unlockAudio();
+
+            if (e.target.closest('button')) {
                 return;
             }
 
@@ -1619,6 +1693,8 @@
         }
 
         function onLegacyTouchStart(e) {
+            unlockAudio();
+
             if (e.target.closest('button')) {
                 return;
             }
