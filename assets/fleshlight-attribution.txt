@@ -1,0 +1,6 @@
+Asset: fleshlight-cropped.png
+Source file: Pink Mouth Fleshlight.jpg
+Source URL: https://commons.wikimedia.org/wiki/File:Pink_Mouth_Fleshlight.jpg
+Copyright holder: Interactive Life Forms, LLC
+License: Creative Commons Attribution-Share Alike 3.0 Unported (CC BY-SA 3.0)
+Changes made: downloaded resized derivative, removed white background, cropped to the visible sleeve, and exported as a transparent PNG for in-game use.

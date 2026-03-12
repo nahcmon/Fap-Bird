@@ -148,6 +148,47 @@
             color: #ffd166;
             max-width: 24rem;
         }
+
+        .difficulty-panel {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .difficulty-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .difficulty-button {
+            padding: 12px 18px;
+            border-radius: 999px;
+            border: 3px solid rgba(255, 255, 255, 0.75);
+            background: rgba(15, 24, 44, 0.75);
+            color: #fff;
+            font: inherit;
+            font-size: clamp(15px, 2.8vw, 20px);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .difficulty-button.selected {
+            background: #ffd447;
+            color: #241600;
+            border-color: #fff6b0;
+        }
+
+        .difficulty-current {
+            color: #ffe59a;
+            font-size: clamp(15px, 3.6vw, 24px) !important;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -155,6 +196,14 @@
         <canvas id="gameCanvas"></canvas>
         <div id="menuScreen" class="screen">
             <h1>FAP BIRD</h1>
+            <div class="difficulty-panel">
+                <p class="instructions">Fixed Speed Difficulty</p>
+                <div class="difficulty-buttons" id="difficultyButtons">
+                    <button class="difficulty-button" data-difficulty="slow">SLOW</button>
+                    <button class="difficulty-button selected" data-difficulty="medium">MEDIUM</button>
+                    <button class="difficulty-button" data-difficulty="fast">FAST</button>
+                </div>
+            </div>
             <button class="menu-button" id="singlePlayerBtn">SINGLE PLAYER</button>
             <button class="menu-button" id="multiPlayerBtn">MULTIPLAYER</button>
             <button class="menu-button" id="unlimitedPlayerBtn">UNLIMITED</button>
@@ -168,6 +217,7 @@
         </div>
         <div id="startScreen" class="screen hidden">
             <h1>FAP BIRD</h1>
+            <p id="difficultyCurrent" class="difficulty-current">Difficulty: MEDIUM</p>
             <p id="startPrompt">Press SPACE or TAP to start</p>
             <p id="flapPrompt" class="instructions">Press SPACE or TAP to fap and fly!</p>
         </div>
@@ -197,6 +247,8 @@
         const startPrompt = document.getElementById('startPrompt');
         const flapPrompt = document.getElementById('flapPrompt');
         const restartText = document.getElementById('restartText');
+        const difficultyButtons = Array.from(document.querySelectorAll('.difficulty-button'));
+        const difficultyCurrent = document.getElementById('difficultyCurrent');
 
         // Set canvas to full screen
         function setAppHeight() {
@@ -232,9 +284,36 @@
             width: 384,
             height: 720
         };
+        const difficultyConfigs = {
+            slow: { label: 'SLOW', pipeSpeed: 2.35, pipeSpacing: 430, fleshlightChance: 0.2 },
+            medium: { label: 'MEDIUM', pipeSpeed: 3.0, pipeSpacing: 430, fleshlightChance: 0.24 },
+            fast: { label: 'FAST', pipeSpeed: 3.8, pipeSpacing: 430, fleshlightChance: 0.28 }
+        };
+        let selectedDifficulty = 'medium';
+        const penisTapShrink = 0.75;
+        const penisScoreGrowth = 5;
+        const penisResetLength = 15;
+        const minimumPenisLength = 0;
+        const fleshlightEventDurationMs = 3000;
+        const fixedStepMs = 1000 / 60;
+        const maxFrameDeltaMs = 100;
         const penisBaseLength = 15;
         const penisSegmentCount = 8;
         const penisConstraintIterations = 7;
+        const fleshlightImage = new Image();
+        let animationFrameId = 0;
+        let lastFrameTimestamp = 0;
+        let accumulatorMs = 0;
+        let fleshlightImageReady = false;
+
+        // Asset attribution lives in ./assets/fleshlight-attribution.txt.
+        fleshlightImage.addEventListener('load', () => {
+            fleshlightImageReady = true;
+        });
+        fleshlightImage.addEventListener('error', () => {
+            fleshlightImageReady = false;
+        });
+        fleshlightImage.src = './assets/fleshlight-cropped.png';
 
         function getSinglePlayerViewport() {
             if (isMobileLayout) {
@@ -248,6 +327,37 @@
                 width: width,
                 height: canvas.height
             };
+        }
+
+        function getSinglePlayerRenderBox() {
+            const container = getSinglePlayerViewport();
+            const scale = Math.min(
+                container.width / singlePlayerWorld.width,
+                container.height / singlePlayerWorld.height
+            );
+            const width = singlePlayerWorld.width * scale;
+            const height = singlePlayerWorld.height * scale;
+
+            return {
+                x: container.x + (container.width - width) / 2,
+                y: container.y + (container.height - height) / 2,
+                width: width,
+                height: height,
+                scale: scale,
+                container: container
+            };
+        }
+
+        function getDifficultyConfig() {
+            return difficultyConfigs[selectedDifficulty];
+        }
+
+        function updateDifficultyUI() {
+            const difficulty = getDifficultyConfig();
+            difficultyButtons.forEach((button) => {
+                button.classList.toggle('selected', button.dataset.difficulty === selectedDifficulty);
+            });
+            difficultyCurrent.textContent = `Difficulty: ${difficulty.label}`;
         }
 
         function getSinglePlayerBirdX(viewportWidth) {
@@ -270,18 +380,23 @@
         }
 
         function updateControlText() {
+            const difficulty = getDifficultyConfig();
             if (gameMode === 'single') {
                 startPrompt.textContent = isMobileLayout ? 'Tap to start' : 'Press SPACE or TAP to start';
-                flapPrompt.textContent = isMobileLayout ? 'Tap anywhere to fap and fly!' : 'Press SPACE or TAP to fap and fly!';
+                flapPrompt.textContent = isMobileLayout
+                    ? `Tap anywhere to fap and fly at ${difficulty.label} speed!`
+                    : `Press SPACE or TAP to fap and fly at ${difficulty.label} speed!`;
                 restartText.textContent = isMobileLayout ? 'Tap to try again' : 'Press SPACE or TAP to try again';
+                updateDifficultyUI();
                 return;
             }
 
             startPrompt.textContent = 'Press any player key to start';
-            flapPrompt.textContent = 'Each player uses their own key.';
+            flapPrompt.textContent = `Each player uses their own key. Speed: ${difficulty.label}.`;
             restartText.textContent = gameMode === 'multi'
                 ? 'Press ENTER or TAP to try again'
                 : 'Tap your lane to rejoin';
+            updateDifficultyUI();
         }
 
         function forceMenuState() {
@@ -395,7 +510,8 @@
                 viewportHeight: viewportHeight,
                 penisNodes: [],
                 lastVelocity: 0,
-                lastRotation: 0
+                lastRotation: 0,
+                eventState: null
             };
 
             resetPenisRope(bird);
@@ -405,7 +521,6 @@
         // Game constants
         const pipeWidth = 90;
         const pipeGap = 250;
-        const pipeSpeed = 3;
 
         // Clouds
         const clouds = [];
@@ -696,6 +811,76 @@
             bird.ballsJiggle = Math.sin(frames * 0.4) * 0.3;
         }
 
+        function startFleshlightEvent(bird) {
+            bird.eventState = {
+                elapsedMs: 0,
+                durationMs: fleshlightEventDurationMs,
+                strokePhase: 0.18,
+                strokeSpeed: 0.14,
+                lockedY: bird.y,
+                lockedRotation: bird.rotation
+            };
+            bird.velocity = 0;
+            bird.lastVelocity = 0;
+            playScoreSound();
+        }
+
+        function updateFleshlightEvent(bird) {
+            if (!bird.eventState) {
+                return;
+            }
+
+            bird.eventState.elapsedMs += fixedStepMs;
+            bird.eventState.strokeSpeed = Math.min(1.45, bird.eventState.strokeSpeed + 0.0085);
+            bird.eventState.strokePhase += bird.eventState.strokeSpeed;
+            bird.y = bird.eventState.lockedY;
+            bird.rotation = bird.eventState.lockedRotation;
+            bird.velocity = 0;
+
+            updateParticles(bird);
+            updateJiggle(bird);
+
+            if (bird.eventState.elapsedMs >= bird.eventState.durationMs) {
+                bird.eventState = null;
+                bird.penisLength = penisResetLength;
+                resetPenisRope(bird);
+            }
+        }
+
+        function tryCollectFleshlight(bird) {
+            if (bird.eventState) {
+                return false;
+            }
+
+            const tipPos = getPenisTipPosition(bird);
+            const bodyCenterX = bird.x + bird.width / 2;
+            const bodyCenterY = bird.y + bird.height / 2;
+
+            for (const pipe of bird.pipes) {
+                if (!pipe.fleshlight) {
+                    continue;
+                }
+
+                const fleshlight = getFleshlightPosition(pipe);
+                const dxBody = bodyCenterX - fleshlight.x;
+                const dyBody = bodyCenterY - fleshlight.y;
+                const dxTip = tipPos.x - fleshlight.x;
+                const dyTip = tipPos.y - fleshlight.y;
+                const hitRadius = Math.max(fleshlight.width, fleshlight.height) * 0.55;
+
+                if (
+                    Math.hypot(dxBody, dyBody) < hitRadius + bird.width * 0.35 ||
+                    Math.hypot(dxTip, dyTip) < hitRadius + 10
+                ) {
+                    pipe.fleshlight = null;
+                    startFleshlightEvent(bird);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // Draw bird
         function drawBird(bird) {
             ctx.save();
@@ -704,6 +889,9 @@
 
             const penisWidth = 8;
             const ballRadius = 8;
+            const eyeScale = bird.eventState
+                ? 1 + Math.sin(Math.min(bird.eventState.elapsedMs / 450, 1) * Math.PI) * 0.85
+                : 1;
 
             // Calculate rope physics positions
             const ballsLength = 8; // Shorter - closer to body
@@ -767,6 +955,22 @@
             ctx.arc(tipX, tipY, penisWidth / 2 + 2, 0, Math.PI * 2);
             ctx.fill();
 
+            if (bird.eventState) {
+                const progress = bird.eventState.elapsedMs / bird.eventState.durationMs;
+                const strokeT = Math.min(
+                    0.9,
+                    Math.max(0.22, 0.52 + Math.sin(bird.eventState.strokePhase) * (0.18 + progress * 0.05))
+                );
+                const attachPoint = getPenisPointAt(bird, strokeT);
+                drawFleshlightSprite(
+                    attachPoint.x,
+                    attachPoint.y,
+                    attachPoint.angle - Math.PI / 2,
+                    1 + Math.abs(Math.sin(bird.eventState.strokePhase)) * 0.06,
+                    'opening'
+                );
+            }
+
             // Bird body
             ctx.fillStyle = bird.color;
             ctx.beginPath();
@@ -781,12 +985,12 @@
             // Eye
             ctx.fillStyle = 'white';
             ctx.beginPath();
-            ctx.arc(bird.width / 4, -bird.height / 6, 9, 0, Math.PI * 2);
+            ctx.arc(bird.width / 4, -bird.height / 6, 9 * eyeScale, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.fillStyle = 'black';
             ctx.beginPath();
-            ctx.arc(bird.width / 4 + 3, -bird.height / 6, 4, 0, Math.PI * 2);
+            ctx.arc(bird.width / 4 + 3, -bird.height / 6, 4 * eyeScale, 0, Math.PI * 2);
             ctx.fill();
 
             // Beak
@@ -816,16 +1020,63 @@
             return { x: rotatedX, y: rotatedY };
         }
 
+        function getPenisPointAt(bird, normalizedT) {
+            const segmentCount = bird.penisSegments.length;
+            if (segmentCount === 0) {
+                return { x: 0, y: bird.height / 2, angle: Math.PI / 2 };
+            }
+
+            const clampedT = Math.min(Math.max(normalizedT, 0), 0.9999);
+            const scaledIndex = clampedT * segmentCount;
+            const segmentIndex = Math.min(segmentCount - 1, Math.floor(scaledIndex));
+            const localT = scaledIndex - segmentIndex;
+            const segment = bird.penisSegments[segmentIndex];
+            const x = segment.x + (segment.endX - segment.x) * localT;
+            const y = segment.y + (segment.endY - segment.y) * localT;
+            const angle = Math.atan2(segment.endY - segment.y, segment.endX - segment.x);
+
+            return { x, y, angle };
+        }
+
+        function adjustPenisLength(bird, delta) {
+            bird.penisLength = Math.max(minimumPenisLength, bird.penisLength + delta);
+        }
+
+        function createFleshlight(topHeight) {
+            return {
+                offsetX: pipeWidth * 0.5,
+                y: topHeight + pipeGap * (0.3 + Math.random() * 0.4),
+                width: 34,
+                height: 64,
+                bobPhase: Math.random() * Math.PI * 2
+            };
+        }
+
+        function getFleshlightPosition(pipe) {
+            if (!pipe.fleshlight) {
+                return null;
+            }
+
+            return {
+                x: pipe.x + pipe.fleshlight.offsetX,
+                y: pipe.fleshlight.y + Math.sin(frames * 0.08 + pipe.fleshlight.bobPhase) * 12,
+                width: pipe.fleshlight.width,
+                height: pipe.fleshlight.height
+            };
+        }
+
         // Create pipe
         function createPipe(bird, viewportWidth, viewportHeight) {
             const minHeight = 50;
             const maxHeight = viewportHeight - pipeGap - minHeight - 100;
             const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
+            const shouldSpawnFleshlight = Math.random() < getDifficultyConfig().fleshlightChance;
 
             bird.pipes.push({
                 x: viewportWidth,
                 topHeight: topHeight,
-                scored: false
+                scored: false,
+                fleshlight: shouldSpawnFleshlight ? createFleshlight(topHeight) : null
             });
         }
 
@@ -855,14 +1106,79 @@
             });
         }
 
+        function roundedRectPath(x, y, width, height, radius) {
+            const r = Math.min(radius, width / 2, height / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + width - r, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+            ctx.lineTo(x + width, y + height - r);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            ctx.lineTo(x + r, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        function drawFleshlightFallback(scale = 1) {
+            ctx.scale(scale, scale);
+
+            ctx.fillStyle = '#ff5f8d';
+            roundedRectPath(-14, -21, 28, 42, 12);
+            ctx.fill();
+
+            ctx.fillStyle = '#ff8fb4';
+            roundedRectPath(-11, -17, 22, 34, 10);
+            ctx.fill();
+
+            ctx.fillStyle = '#7b1236';
+            ctx.beginPath();
+            ctx.ellipse(0, -2, 7, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#ffd6e2';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-14, -21, 28, 42);
+        }
+
+        function drawFleshlightSprite(x, y, rotation = 0, scale = 1, anchor = 'center') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation);
+
+            if (fleshlightImageReady && fleshlightImage.naturalWidth > 0 && fleshlightImage.naturalHeight > 0) {
+                const height = 62 * scale;
+                const width = height * (fleshlightImage.naturalWidth / fleshlightImage.naturalHeight);
+                const drawY = anchor === 'opening' ? -height * 0.24 : -height * 0.5;
+                ctx.drawImage(fleshlightImage, -width / 2, drawY, width, height);
+            } else {
+                drawFleshlightFallback(scale);
+            }
+
+            ctx.restore();
+        }
+
+        function drawFleshlights(bird) {
+            bird.pipes.forEach((pipe) => {
+                if (!pipe.fleshlight) {
+                    return;
+                }
+
+                const item = getFleshlightPosition(pipe);
+                drawFleshlightSprite(item.x, item.y, Math.sin(frames * 0.05 + pipe.fleshlight.bobPhase) * 0.2, 1);
+            });
+        }
+
         // Update pipes
         function updatePipes(bird, viewportWidth, viewportHeight) {
-            if (frames % 150 === 0) {
+            const lastPipe = bird.pipes[bird.pipes.length - 1];
+            if (!lastPipe || lastPipe.x < viewportWidth - getDifficultyConfig().pipeSpacing) {
                 createPipe(bird, viewportWidth, viewportHeight);
             }
 
             for (let i = bird.pipes.length - 1; i >= 0; i--) {
-                bird.pipes[i].x -= pipeSpeed;
+                bird.pipes[i].x -= getDifficultyConfig().pipeSpeed;
 
                 // Score when passing pipe
                 if (!bird.pipes[i].scored && bird.pipes[i].x + pipeWidth < bird.x) {
@@ -871,7 +1187,7 @@
                     playScoreSound();
 
                     // Grow penis with each passed pipe
-                    bird.penisLength += 5;
+                    adjustPenisLength(bird, penisScoreGrowth);
                 }
 
                 // Remove off-screen pipes
@@ -971,8 +1287,7 @@
             ctx.fill();
         }
 
-        // Draw and update clouds
-        function drawClouds(viewportWidth, viewportHeight) {
+        function updateClouds(viewportWidth, viewportHeight) {
             clouds.forEach(cloud => {
                 if (cloud.x > viewportWidth + cloud.width) {
                     cloud.x = cloud.x % (viewportWidth + cloud.width);
@@ -983,6 +1298,11 @@
                     cloud.y = Math.random() * (viewportHeight * 0.4);
                 }
 
+            });
+        }
+
+        function drawClouds() {
+            clouds.forEach(cloud => {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
 
                 // Draw cloud with multiple circles for fluffy effect
@@ -1076,17 +1396,17 @@
             ctx.fillRect(0, 0, vp.width, vp.height / 2);
 
             // Draw sun (scaled)
-            const sunScale = vp.width / canvas.width;
             drawSun(vp.width);
 
             // Draw clouds (scaled)
-            drawClouds(vp.width, vp.height);
+            drawClouds();
 
             // Draw ground
             drawGround(vp.width, vp.height);
 
             // Draw game objects
             drawPipes(bird, vp.height);
+            drawFleshlights(bird);
             drawParticles(bird);
             drawBird(bird);
 
@@ -1144,170 +1464,272 @@
             }
         }
 
-        // Game loop
-        function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        function beginSinglePlayerGameOver(bird) {
+            bird.alive = false;
+            gameState = 'gameOver';
+            gameOverTime = Date.now();
+            gameOverScreen.classList.remove('hidden');
 
-            if (gameMode === 'single' && players.length > 0) {
-                const singleViewport = getSinglePlayerViewport();
-                const renderWidth = singleViewport.width;
-                const renderHeight = singleViewport.height;
-                const offsetX = singleViewport.x;
-                const gameWidth = singlePlayerWorld.width;
-                const gameHeight = singlePlayerWorld.height;
+            const gameOverTitle = document.querySelector('#gameOverScreen h1');
+            gameOverTitle.textContent = bird.gameOverReason === 'raper' ? 'YOU RAPER' : 'GAME OVER';
+            finalScoreDisplay.textContent = bird.score;
+            playGameOverSound();
+            setGameOverCooldownText(
+                isMobileLayout ? 'Tap to try again' : `Press ${bird.key.toUpperCase()} or TAP to try again`
+            );
+        }
 
-                // Fill background
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+        function beginSharedMultiplayerGameOver() {
+            gameState = 'gameOver';
+            gameOverTime = Date.now();
+            gameOverScreen.classList.remove('hidden');
 
-                // Set clipping region for game area
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(offsetX, 0, renderWidth, renderHeight);
-                ctx.clip();
+            let winner = players[0];
+            players.forEach((bird) => {
+                if (bird.score > winner.score) {
+                    winner = bird;
+                }
+            });
 
-                // Translate to game area
-                ctx.translate(offsetX, 0);
-                ctx.scale(renderWidth / gameWidth, renderHeight / gameHeight);
+            const gameOverTitle = document.querySelector('#gameOverScreen h1');
+            gameOverTitle.textContent = `PLAYER ${players.indexOf(winner) + 1} WINS!`;
+            finalScoreDisplay.textContent = winner.score;
+            playGameOverSound();
+            setGameOverCooldownText('Press ENTER or TAP to try again');
+        }
 
-                // Draw sky gradient
-                const skyGradient = ctx.createLinearGradient(0, 0, 0, gameHeight / 2);
-                skyGradient.addColorStop(0, '#87CEEB');
-                skyGradient.addColorStop(0.6, '#B0E0E6');
-                skyGradient.addColorStop(1, '#E0F6FF');
-                ctx.fillStyle = skyGradient;
-                ctx.fillRect(0, 0, gameWidth, gameHeight / 2);
+        function updateBirdCourseStep(bird, viewportWidth, viewportHeight) {
+            if (bird.eventState) {
+                updateFleshlightEvent(bird);
+                return { paused: true };
+            }
 
-                drawSun(gameWidth);
-                drawClouds(gameWidth, gameHeight);
-                drawGround(gameWidth, gameHeight);
+            if (!bird.alive) {
+                updateParticles(bird);
+                updateJiggle(bird);
+                return { alive: false };
+            }
 
-                if (gameState === 'playing') {
-                    frames++;
-                    const bird = players[0];
-                    if (bird.alive) {
-                        updateBird(bird);
-                        updatePipes(bird, gameWidth, gameHeight);
+            updateBird(bird);
+            updatePipes(bird, viewportWidth, viewportHeight);
+            updateParticles(bird);
+            updateJiggle(bird);
+
+            if (tryCollectFleshlight(bird)) {
+                return { collected: true };
+            }
+
+            if (checkCollision(bird, viewportHeight)) {
+                bird.alive = false;
+                return { collided: true };
+            }
+
+            return { alive: true };
+        }
+
+        function updateSinglePlayerStep() {
+            if (players.length === 0) {
+                return;
+            }
+
+            const bird = players[0];
+            scoreDisplay.textContent = bird.score;
+
+            if (gameState === 'playing') {
+                const result = updateBirdCourseStep(bird, singlePlayerWorld.width, singlePlayerWorld.height);
+                if (result.collided) {
+                    beginSinglePlayerGameOver(bird);
+                }
+                return;
+            }
+
+            if (bird.eventState) {
+                updateFleshlightEvent(bird);
+            } else {
+                updateParticles(bird);
+                updateJiggle(bird);
+            }
+        }
+
+        function updateUnlimitedStep() {
+            players.forEach((bird, index) => {
+                const vp = getViewport(index, players.length);
+                if (bird.gameState === 'playing') {
+                    const result = updateBirdCourseStep(bird, vp.width, vp.height);
+                    if (result.collided) {
+                        bird.gameState = 'gameOver';
+                        bird.gameOverTime = Date.now();
+                    }
+                } else if (bird.eventState) {
+                    updateFleshlightEvent(bird);
+                } else {
+                    updateParticles(bird);
+                    updateJiggle(bird);
+                }
+            });
+        }
+
+        function updateSharedMultiplayerStep() {
+            const sharedPause = players.some((bird) => bird.eventState);
+
+            if (gameState !== 'playing') {
+                players.forEach((bird) => {
+                    if (bird.eventState) {
+                        updateFleshlightEvent(bird);
+                    } else {
                         updateParticles(bird);
                         updateJiggle(bird);
-
-                        // Update score display
-                        scoreDisplay.textContent = bird.score;
-
-                        if (checkCollision(bird, gameHeight)) {
-                            bird.alive = false;
-                            gameState = 'gameOver';
-                            gameOverTime = Date.now();
-                            gameOverScreen.classList.remove('hidden');
-
-                            const gameOverTitle = document.querySelector('#gameOverScreen h1');
-                            if (bird.gameOverReason === 'raper') {
-                                gameOverTitle.textContent = 'YOU RAPER';
-                            } else {
-                                gameOverTitle.textContent = 'GAME OVER';
-                            }
-
-                            finalScoreDisplay.textContent = bird.score;
-                            playGameOverSound();
-
-                            // Update restart text with cooldown
-                            setGameOverCooldownText(
-                                isMobileLayout ? 'Tap to try again' : `Press ${bird.key.toUpperCase()} or TAP to try again`
-                            );
-                        }
                     }
-                } else {
-                    updateJiggle(players[0]);
+                });
+                return;
+            }
+
+            if (sharedPause) {
+                players.forEach((bird) => {
+                    if (bird.eventState) {
+                        updateFleshlightEvent(bird);
+                    } else {
+                        updateParticles(bird);
+                        updateJiggle(bird);
+                    }
+                });
+                return;
+            }
+
+            let allDead = true;
+            for (let index = 0; index < players.length; index++) {
+                const bird = players[index];
+                const vp = getViewport(index, players.length);
+
+                if (!bird.alive) {
+                    updateParticles(bird);
+                    updateJiggle(bird);
+                    continue;
                 }
 
-                drawPipes(players[0], gameHeight);
-                drawParticles(players[0]);
-                drawBird(players[0]);
-
-                ctx.restore();
-            } else if ((gameMode === 'multi' || gameMode === 'unlimited') && players.length > 0) {
-                // Multiplayer - split screen
-                if (gameMode === 'unlimited') {
-                    // Unlimited mode - each player independent
-                    frames++;
-                    players.forEach((bird, index) => {
-                        const vp = getViewport(index, players.length);
-                        if (bird.gameState === 'playing' && bird.alive) {
-                            updateBird(bird);
-                            updatePipes(bird, vp.width, vp.height);
-                            updateParticles(bird);
-                            updateJiggle(bird);
-
-                            if (checkCollision(bird, vp.height)) {
-                                bird.alive = false;
-                                bird.gameState = 'gameOver';
-                                bird.gameOverTime = Date.now();
-                            }
-                        } else {
-                            updateJiggle(bird);
-                        }
-                    });
-
-                    // Draw each player's viewport
-                    players.forEach((bird, index) => {
-                        drawPlayerViewport(bird, index);
-                    });
-                } else {
-                    // Regular multiplayer - all players together
-                    if (gameState === 'playing') {
-                        frames++;
-
-                        let allDead = true;
-                        players.forEach((bird, index) => {
-                            const vp = getViewport(index, players.length);
-                            if (bird.alive) {
-                                allDead = false;
-                                updateBird(bird);
-                                updatePipes(bird, vp.width, vp.height);
-                                updateParticles(bird);
-                                updateJiggle(bird);
-
-                                if (checkCollision(bird, vp.height)) {
-                                    bird.alive = false;
-                                }
-                            }
-                        });
-
-                        // Check if all players are dead
-                        if (allDead) {
-                            gameState = 'gameOver';
-                            gameOverTime = Date.now();
-                            gameOverScreen.classList.remove('hidden');
-
-                            // Find winner
-                            let winner = players[0];
-                            players.forEach(bird => {
-                                if (bird.score > winner.score) {
-                                    winner = bird;
-                                }
-                            });
-
-                            const gameOverTitle = document.querySelector('#gameOverScreen h1');
-                            gameOverTitle.textContent = `PLAYER ${players.indexOf(winner) + 1} WINS!`;
-                            finalScoreDisplay.textContent = winner.score;
-                            playGameOverSound();
-
-                            // Update restart text with cooldown
-                            setGameOverCooldownText('Press ENTER or TAP to try again');
-                        }
-                    } else {
-                        players.forEach(bird => updateJiggle(bird));
-                    }
-
-                    // Draw each player's viewport
-                    players.forEach((bird, index) => {
-                        drawPlayerViewport(bird, index);
-                    });
+                allDead = false;
+                const result = updateBirdCourseStep(bird, vp.width, vp.height);
+                if (result.collided) {
+                    bird.alive = false;
                 }
             }
 
-            requestAnimationFrame(gameLoop);
+            if (players.every((bird) => !bird.alive)) {
+                beginSharedMultiplayerGameOver();
+            }
         }
+
+        function stepGame() {
+            frames++;
+
+            if (gameMode === 'single') {
+                updateClouds(singlePlayerWorld.width, singlePlayerWorld.height);
+                updateSinglePlayerStep();
+                return;
+            }
+
+            updateClouds(canvas.width, canvas.height);
+            if ((gameMode === 'multi' || gameMode === 'unlimited') && players.length > 0) {
+                if (gameMode === 'unlimited') {
+                    updateUnlimitedStep();
+                } else {
+                    updateSharedMultiplayerStep();
+                }
+            }
+        }
+
+        function drawSinglePlayerBackdrop() {
+            const splitY = canvas.height * 0.5;
+            const gradient = ctx.createLinearGradient(0, 0, 0, splitY);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(0.6, '#B0E0E6');
+            gradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, splitY);
+            drawGround(canvas.width, canvas.height);
+        }
+
+        function renderSinglePlayer() {
+            const renderBox = getSinglePlayerRenderBox();
+            const bird = players[0];
+
+            if (isMobileLayout) {
+                drawSinglePlayerBackdrop();
+            } else {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(renderBox.x, renderBox.y, renderBox.width, renderBox.height);
+            ctx.clip();
+            ctx.translate(renderBox.x, renderBox.y);
+            ctx.scale(renderBox.scale, renderBox.scale);
+
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, singlePlayerWorld.height / 2);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(0.6, '#B0E0E6');
+            skyGradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, singlePlayerWorld.width, singlePlayerWorld.height / 2);
+
+            drawSun(singlePlayerWorld.width);
+            drawClouds();
+            drawGround(singlePlayerWorld.width, singlePlayerWorld.height);
+            drawPipes(bird, singlePlayerWorld.height);
+            drawFleshlights(bird);
+            drawParticles(bird);
+            drawBird(bird);
+            ctx.restore();
+        }
+
+        function renderGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameMode === 'single' && players.length > 0) {
+                renderSinglePlayer();
+                return;
+            }
+
+            if ((gameMode === 'multi' || gameMode === 'unlimited') && players.length > 0) {
+                players.forEach((bird, index) => {
+                    drawPlayerViewport(bird, index);
+                });
+                return;
+            }
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function gameLoop(timestamp = 0) {
+            if (!lastFrameTimestamp) {
+                lastFrameTimestamp = timestamp;
+            }
+
+            const deltaMs = Math.min(maxFrameDeltaMs, timestamp - lastFrameTimestamp);
+            lastFrameTimestamp = timestamp;
+            accumulatorMs += deltaMs;
+
+            while (accumulatorMs >= fixedStepMs) {
+                stepGame();
+                accumulatorMs -= fixedStepMs;
+            }
+
+            renderGame();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        window.advanceTime = async (ms) => {
+            const totalSteps = Math.max(1, Math.round(ms / fixedStepMs));
+            for (let i = 0; i < totalSteps; i++) {
+                stepGame();
+            }
+            lastFrameTimestamp = performance.now();
+            accumulatorMs = 0;
+            renderGame();
+        };
 
         function setGameOverCooldownText(nextText) {
             restartText.textContent = 'Wait...';
@@ -1338,18 +1760,20 @@
                 bird.velocity = bird.jumpForce;
                 bird.gameState = 'playing';
                 createParticles(bird);
+                adjustPenisLength(bird, -penisTapShrink);
             });
             playFapSound();
         }
 
         function flapBird(bird) {
-            if (!bird || !bird.alive) {
+            if (!bird || !bird.alive || bird.eventState) {
                 return;
             }
 
             unlockAudio();
             bird.velocity = bird.jumpForce;
             createParticles(bird);
+            adjustPenisLength(bird, -penisTapShrink);
             playFapSound();
         }
 
@@ -1360,6 +1784,7 @@
             resetGame();
             players[0].velocity = players[0].jumpForce;
             createParticles(players[0]);
+            adjustPenisLength(players[0], -penisTapShrink);
             playFapSound();
         }
 
@@ -1371,6 +1796,7 @@
             players.forEach(bird => {
                 bird.velocity = bird.jumpForce;
                 createParticles(bird);
+                adjustPenisLength(bird, -penisTapShrink);
             });
             playFapSound();
         }
@@ -1415,6 +1841,7 @@
                                     unlockAudio();
                                     players[index].velocity = players[index].jumpForce;
                                     createParticles(players[index]);
+                                    adjustPenisLength(players[index], -penisTapShrink);
                                     playFapSound();
                                     return true;
                                 }
@@ -1458,14 +1885,20 @@
         }
 
         function renderGameToText() {
-            const singleViewport = getSinglePlayerViewport();
+            const singleViewport = getSinglePlayerRenderBox();
             return JSON.stringify({
                 coordinates: 'origin top-left; x increases right; y increases down',
                 gameState: gameState,
                 gameMode: gameMode,
+                difficulty: getDifficultyConfig().label,
                 layout: isMobileLayout ? 'mobile-fullscreen' : 'desktop-centered',
                 activeArea: gameMode === 'single'
-                    ? singleViewport
+                    ? {
+                        x: singleViewport.x,
+                        y: singleViewport.y,
+                        width: singleViewport.width,
+                        height: singleViewport.height
+                    }
                     : { x: 0, y: 0, width: canvas.width, height: canvas.height },
                 singlePlayerWorld: gameMode === 'single' ? singlePlayerWorld : null,
                 players: players.map((bird, index) => ({
@@ -1477,6 +1910,8 @@
                     y: bird.y,
                     velocity: bird.velocity,
                     score: bird.score,
+                    penisLength: bird.penisLength,
+                    eventActive: !!bird.eventState,
                     nextPipe: bird.pipes[0]
                         ? { x: bird.pipes[0].x, topHeight: bird.pipes[0].topHeight }
                         : null
@@ -1490,6 +1925,13 @@
         }
 
         window.render_game_to_text = renderGameToText;
+
+        difficultyButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                selectedDifficulty = button.dataset.difficulty;
+                updateControlText();
+            });
+        });
 
         // Menu button handlers
         singlePlayerBtn.addEventListener('click', () => {
@@ -1644,6 +2086,7 @@
                                     unlockAudio();
                                     players[index].velocity = players[index].jumpForce;
                                     createParticles(players[index]);
+                                    adjustPenisLength(players[index], -penisTapShrink);
                                     playFapSound();
                                 }
                             }
