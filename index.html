@@ -295,6 +295,7 @@
         const penisResetLength = 15;
         const minimumPenisLength = 0;
         const fleshlightEventDurationMs = 3000;
+        const fleshlightEyePopDurationMs = 320;
         const fixedStepMs = 1000 / 60;
         const maxFrameDeltaMs = 100;
         const penisBaseLength = 15;
@@ -813,10 +814,11 @@
 
         function startFleshlightEvent(bird) {
             bird.eventState = {
+                phase: 'stroke',
                 elapsedMs: 0,
                 durationMs: fleshlightEventDurationMs,
                 strokePhase: 0.18,
-                strokeSpeed: 0.14,
+                strokeSpeed: 0.28,
                 lockedY: bird.y,
                 lockedRotation: bird.rotation
             };
@@ -831,20 +833,36 @@
             }
 
             bird.eventState.elapsedMs += fixedStepMs;
-            bird.eventState.strokeSpeed = Math.min(1.45, bird.eventState.strokeSpeed + 0.0085);
-            bird.eventState.strokePhase += bird.eventState.strokeSpeed;
             bird.y = bird.eventState.lockedY;
             bird.rotation = bird.eventState.lockedRotation;
             bird.velocity = 0;
 
+            if (bird.eventState.phase === 'stroke') {
+                bird.eventState.strokeSpeed = Math.min(2.9, bird.eventState.strokeSpeed + 0.017);
+                bird.eventState.strokePhase += bird.eventState.strokeSpeed;
+
+                if (bird.eventState.elapsedMs >= bird.eventState.durationMs) {
+                    bird.eventState.phase = 'eye-pop';
+                    bird.eventState.elapsedMs = 0;
+                    bird.eventState.durationMs = fleshlightEyePopDurationMs;
+                    bird.penisLength = penisResetLength;
+                    resetPenisRope(bird);
+                }
+            } else if (bird.eventState.elapsedMs >= bird.eventState.durationMs) {
+                bird.eventState = null;
+            }
+
             updateParticles(bird);
             updateJiggle(bird);
+        }
 
-            if (bird.eventState.elapsedMs >= bird.eventState.durationMs) {
-                bird.eventState = null;
-                bird.penisLength = penisResetLength;
-                resetPenisRope(bird);
+        function getBirdEyeScale(bird) {
+            if (!bird.eventState || bird.eventState.phase !== 'eye-pop') {
+                return 1;
             }
+
+            const progress = Math.min(1, bird.eventState.elapsedMs / bird.eventState.durationMs);
+            return 1 + Math.sin(progress * Math.PI) * 0.85;
         }
 
         function tryCollectFleshlight(bird) {
@@ -889,9 +907,7 @@
 
             const penisWidth = 8;
             const ballRadius = 8;
-            const eyeScale = bird.eventState
-                ? 1 + Math.sin(Math.min(bird.eventState.elapsedMs / 450, 1) * Math.PI) * 0.85
-                : 1;
+            const eyeScale = getBirdEyeScale(bird);
 
             // Calculate rope physics positions
             const ballsLength = 8; // Shorter - closer to body
@@ -955,7 +971,7 @@
             ctx.arc(tipX, tipY, penisWidth / 2 + 2, 0, Math.PI * 2);
             ctx.fill();
 
-            if (bird.eventState) {
+            if (bird.eventState && bird.eventState.phase === 'stroke') {
                 const progress = bird.eventState.elapsedMs / bird.eventState.durationMs;
                 const strokeT = Math.min(
                     0.9,
@@ -1042,13 +1058,23 @@
             bird.penisLength = Math.max(minimumPenisLength, bird.penisLength + delta);
         }
 
-        function createFleshlight(topHeight) {
+        function createFleshlight(viewportHeight, pipeSpacing) {
+            const horizontalMargin = 76;
+            const minOffsetX = pipeWidth + horizontalMargin;
+            const maxOffsetX = Math.max(minOffsetX + 20, pipeSpacing - horizontalMargin);
+            const spawnNearTop = Math.random() < 0.5;
+            const baseY = spawnNearTop
+                ? 90 + Math.random() * 70
+                : viewportHeight - 155 - Math.random() * 90;
+
             return {
-                offsetX: pipeWidth * 0.5,
-                y: topHeight + pipeGap * (0.3 + Math.random() * 0.4),
-                width: 34,
-                height: 64,
-                bobPhase: Math.random() * Math.PI * 2
+                offsetX: minOffsetX + Math.random() * (maxOffsetX - minOffsetX),
+                y: baseY,
+                width: 36,
+                height: 72,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobAmplitude: 8,
+                lane: spawnNearTop ? 'top' : 'bottom'
             };
         }
 
@@ -1059,7 +1085,7 @@
 
             return {
                 x: pipe.x + pipe.fleshlight.offsetX,
-                y: pipe.fleshlight.y + Math.sin(frames * 0.08 + pipe.fleshlight.bobPhase) * 12,
+                y: pipe.fleshlight.y + Math.sin(frames * 0.08 + pipe.fleshlight.bobPhase) * pipe.fleshlight.bobAmplitude,
                 width: pipe.fleshlight.width,
                 height: pipe.fleshlight.height
             };
@@ -1070,13 +1096,14 @@
             const minHeight = 50;
             const maxHeight = viewportHeight - pipeGap - minHeight - 100;
             const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
-            const shouldSpawnFleshlight = Math.random() < getDifficultyConfig().fleshlightChance;
+            const difficulty = getDifficultyConfig();
+            const shouldSpawnFleshlight = Math.random() < difficulty.fleshlightChance;
 
             bird.pipes.push({
                 x: viewportWidth,
                 topHeight: topHeight,
                 scored: false,
-                fleshlight: shouldSpawnFleshlight ? createFleshlight(topHeight) : null
+                fleshlight: shouldSpawnFleshlight ? createFleshlight(viewportHeight, difficulty.pipeSpacing) : null
             });
         }
 
@@ -1166,7 +1193,10 @@
                 }
 
                 const item = getFleshlightPosition(pipe);
-                drawFleshlightSprite(item.x, item.y, Math.sin(frames * 0.05 + pipe.fleshlight.bobPhase) * 0.2, 1);
+                const rotation = pipe.fleshlight.lane === 'top'
+                    ? Math.sin(frames * 0.05 + pipe.fleshlight.bobPhase) * 0.12 - 0.12
+                    : Math.sin(frames * 0.05 + pipe.fleshlight.bobPhase) * 0.12 + 0.12;
+                drawFleshlightSprite(item.x, item.y, rotation, 1);
             });
         }
 
@@ -1191,7 +1221,10 @@
                 }
 
                 // Remove off-screen pipes
-                if (bird.pipes[i].x + pipeWidth < 0) {
+                const fleshlightEdge = bird.pipes[i].fleshlight
+                    ? bird.pipes[i].x + bird.pipes[i].fleshlight.offsetX + bird.pipes[i].fleshlight.width * 0.5
+                    : bird.pipes[i].x + pipeWidth;
+                if (fleshlightEdge < -40) {
                     bird.pipes.splice(i, 1);
                 }
             }

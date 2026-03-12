@@ -21,6 +21,9 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Fleshlight pickups now spawn randomly in the course, pause the run for about 3 seconds on contact, attach to the rope during a thrust animation, briefly widen the bird's eye, then disappear and reset rope length.
 - Replaced the placeholder-drawn fleshlight with a real product photo cutout stored locally at `assets/fleshlight-cropped.png`; `index.html` now preloads the image and falls back to the vector draw if the asset fails.
 - `assets/fleshlight-attribution.txt` records the Wikimedia Commons source and the crop/background-removal changes applied to the licensed image.
+- Refined the local cutout again so it reads cleaner at game scale and removed more of the leftover top-cap/edge artifacts from the first pass.
+- Fleshlight pickups now live in the horizontal space between pipe pairs instead of inside the pipe gap, and they are biased toward either the top or bottom of the lane to make them harder to collect.
+- The fleshlight thrust phase now runs at roughly 2x the previous speed, and the eye-pop moved to the end of the event so the run stays paused until the eyes return to normal.
 - Verification:
 - Desktop regression pass with the bundled Playwright game client completed successfully against `http://127.0.0.1:4173/index.html`.
 - Mobile-sized browser checks confirmed the mobile menu hides extra modes and shows fullscreen single-player copy.
@@ -33,3 +36,5 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Desktop smoke checks confirmed `FAST` difficulty moved multiplayer pipes by `3.8` per fixed step and that one player's fleshlight event pauses the shared multiplayer course.
 - Manual screenshot inspection confirmed the fleshlight event renders on-screen as an attached 3-second animation with the bird held in place.
 - The image-backed fleshlight asset loaded successfully in-browser (`337x634`) and manual screenshots confirmed both the floating pickup and the attached event animation use the real cutout instead of the placeholder vector.
+- Follow-up browser checks confirmed between-pipes placement in the top/bottom bands, a final eye-pop phase (`phase: "eye-pop"`) after the thrust sequence, and resumed play only after that phase clears.
+- Post-change regression pass completed again after the fleshlight-refinement update; bundled Playwright output still showed stable single-player state with fixed-world physics.
