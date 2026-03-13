@@ -27,6 +27,7 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Difficulty got a broad retune: every tier now has tighter pipe spacing, smaller openings, and harsher bird physics, with `FAST` taking the largest jump (`pipeSpeed 4.85`, `pipeSpacing 312`, `pipeGap 176`, `gravity 0.46`).
 - Fixed a ground-render bug where grass blades only showed up on the far-left edge after the run started; the grass scroll wrap now uses positive modulo instead of JavaScript's negative remainder behavior.
 - Fleshlight pauses now also freeze the shared world animation clock and cloud motion, so the full background stays stopped until the event ends.
+- Global game-over screens now freeze the same world animation clock as fleshlight pauses, so clouds, grass scroll, and other frame-driven background motion stay stopped after the run ends.
 - Verification:
 - Desktop regression pass with the bundled Playwright game client completed successfully against `http://127.0.0.1:4173/index.html`.
 - Mobile-sized browser checks confirmed the mobile menu hides extra modes and shows fullscreen single-player copy.
@@ -45,3 +46,4 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Post-change regression pass completed again after the global difficulty retune; the bundled Playwright single-player burst now reaches `gameOver` faster on `MEDIUM`, confirming the base game is materially harder.
 - Browser checks at `frames = 500` now show grass blade offsets spanning the full ground width again (`min 8`, `max 412`, 19 visible bands in the single-player lane) instead of collapsing to the left edge.
 - Fleshlight-pause verification confirmed `frames` and cloud positions stay unchanged during the event (`framesAfter: 220`, `sameClouds: true`), so the background now resumes only after the pause ends.
+- Game-over verification confirmed the same freeze behavior after a run ends: stepping 30 frames in `gameState: "gameOver"` left `frames` unchanged at `310` and cloud positions identical (`sameClouds: true`).

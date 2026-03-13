@@ -1616,6 +1616,10 @@
             return players.some((bird) => bird.eventState);
         }
 
+        function hasEndedRun() {
+            return gameState === 'gameOver';
+        }
+
         function updateUnlimitedStep() {
             const sharedPause = hasActiveFleshlightEvent();
 
@@ -1699,7 +1703,7 @@
         }
 
         function stepGame() {
-            const worldPaused = hasActiveFleshlightEvent();
+            const worldPaused = hasActiveFleshlightEvent() || hasEndedRun();
 
             if (!worldPaused) {
                 frames++;
