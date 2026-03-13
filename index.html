@@ -1390,8 +1390,9 @@
             // Grass blades
             ctx.strokeStyle = '#7A9B2D';
             ctx.lineWidth = 3;
+            const grassWrapWidth = viewportWidth + 40;
             for (let x = 0; x < viewportWidth + 20; x += 20) {
-                const offset = (x - frames * 2) % (viewportWidth + 40);
+                const offset = ((x - frames * 2) % grassWrapWidth + grassWrapWidth) % grassWrapWidth;
                 for (let i = 0; i < 3; i++) {
                     const grassX = offset + i * 7;
                     ctx.beginPath();
@@ -1611,7 +1612,25 @@
             }
         }
 
+        function hasActiveFleshlightEvent() {
+            return players.some((bird) => bird.eventState);
+        }
+
         function updateUnlimitedStep() {
+            const sharedPause = hasActiveFleshlightEvent();
+
+            if (sharedPause) {
+                players.forEach((bird) => {
+                    if (bird.eventState) {
+                        updateFleshlightEvent(bird);
+                    } else {
+                        updateParticles(bird);
+                        updateJiggle(bird);
+                    }
+                });
+                return;
+            }
+
             players.forEach((bird, index) => {
                 const vp = getViewport(index, players.length);
                 if (bird.gameState === 'playing') {
@@ -1630,7 +1649,7 @@
         }
 
         function updateSharedMultiplayerStep() {
-            const sharedPause = players.some((bird) => bird.eventState);
+            const sharedPause = hasActiveFleshlightEvent();
 
             if (gameState !== 'playing') {
                 players.forEach((bird) => {
@@ -1680,15 +1699,23 @@
         }
 
         function stepGame() {
-            frames++;
+            const worldPaused = hasActiveFleshlightEvent();
+
+            if (!worldPaused) {
+                frames++;
+            }
 
             if (gameMode === 'single') {
-                updateClouds(singlePlayerWorld.width, singlePlayerWorld.height);
+                if (!worldPaused) {
+                    updateClouds(singlePlayerWorld.width, singlePlayerWorld.height);
+                }
                 updateSinglePlayerStep();
                 return;
             }
 
-            updateClouds(canvas.width, canvas.height);
+            if (!worldPaused) {
+                updateClouds(canvas.width, canvas.height);
+            }
             if ((gameMode === 'multi' || gameMode === 'unlimited') && players.length > 0) {
                 if (gameMode === 'unlimited') {
                     updateUnlimitedStep();
