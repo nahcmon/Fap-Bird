@@ -28,6 +28,7 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Fixed a ground-render bug where grass blades only showed up on the far-left edge after the run started; the grass scroll wrap now uses positive modulo instead of JavaScript's negative remainder behavior.
 - Fleshlight pauses now also freeze the shared world animation clock and cloud motion, so the full background stays stopped until the event ends.
 - Global game-over screens now freeze the same world animation clock as fleshlight pauses, so clouds, grass scroll, and other frame-driven background motion stay stopped after the run ends.
+- The main loop now keeps physics on a fixed 60 Hz timestep but renders with interpolation between the previous and current simulation states, so high-refresh clients can draw smoother motion without changing gameplay physics.
 - Verification:
 - Desktop regression pass with the bundled Playwright game client completed successfully against `http://127.0.0.1:4173/index.html`.
 - Mobile-sized browser checks confirmed the mobile menu hides extra modes and shows fullscreen single-player copy.
@@ -47,3 +48,5 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Browser checks at `frames = 500` now show grass blade offsets spanning the full ground width again (`min 8`, `max 412`, 19 visible bands in the single-player lane) instead of collapsing to the left edge.
 - Fleshlight-pause verification confirmed `frames` and cloud positions stay unchanged during the event (`framesAfter: 220`, `sameClouds: true`), so the background now resumes only after the pause ends.
 - Game-over verification confirmed the same freeze behavior after a run ends: stepping 30 frames in `gameState: "gameOver"` left `frames` unchanged at `310` and cloud positions identical (`sameClouds: true`).
+- Render-loop verification confirmed the interpolated path is active: after one fixed step, birds, rope segments, and clouds all expose distinct previous/current render states, and `window.advanceTime` still exists for deterministic tests.
+- Post-change regression pass completed again after the interpolation update; gameplay state remained stable while the renderer now uses refresh-rate-driven frames on top of fixed-step physics.
