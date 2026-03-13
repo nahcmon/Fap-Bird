@@ -285,9 +285,33 @@
             height: 720
         };
         const difficultyConfigs = {
-            slow: { label: 'SLOW', pipeSpeed: 2.35, pipeSpacing: 430, fleshlightChance: 0.2 },
-            medium: { label: 'MEDIUM', pipeSpeed: 3.0, pipeSpacing: 430, fleshlightChance: 0.24 },
-            fast: { label: 'FAST', pipeSpeed: 3.8, pipeSpacing: 430, fleshlightChance: 0.28 }
+            slow: {
+                label: 'SLOW',
+                pipeSpeed: 2.95,
+                pipeSpacing: 388,
+                pipeGap: 224,
+                gravity: 0.35,
+                jumpForce: -6.9,
+                fleshlightChance: 0.22
+            },
+            medium: {
+                label: 'MEDIUM',
+                pipeSpeed: 3.7,
+                pipeSpacing: 352,
+                pipeGap: 204,
+                gravity: 0.4,
+                jumpForce: -6.95,
+                fleshlightChance: 0.28
+            },
+            fast: {
+                label: 'FAST',
+                pipeSpeed: 4.85,
+                pipeSpacing: 312,
+                pipeGap: 176,
+                gravity: 0.46,
+                jumpForce: -7,
+                fleshlightChance: 0.36
+            }
         };
         let selectedDifficulty = 'medium';
         const penisTapShrink = 0.75;
@@ -472,6 +496,7 @@
 
         // Create bird function
         function createBird(key, color = '#FFD700', viewportHeight = 900) {
+            const difficulty = getDifficultyConfig();
             const penisSegments = [];
             for (let i = 0; i < penisSegmentCount; i++) {
                 penisSegments.push({
@@ -492,8 +517,8 @@
                 width: 60,
                 height: 45,
                 velocity: 0,
-                gravity: 0.32,
-                jumpForce: -7,
+                gravity: difficulty.gravity,
+                jumpForce: difficulty.jumpForce,
                 rotation: 0,
                 penisLength: 15,
                 penisSegments: penisSegments, // Multi-segment rope
@@ -521,7 +546,6 @@
 
         // Game constants
         const pipeWidth = 90;
-        const pipeGap = 250;
 
         // Clouds
         const clouds = [];
@@ -1093,10 +1117,11 @@
 
         // Create pipe
         function createPipe(bird, viewportWidth, viewportHeight) {
+            const difficulty = getDifficultyConfig();
+            const pipeGap = difficulty.pipeGap;
             const minHeight = 50;
             const maxHeight = viewportHeight - pipeGap - minHeight - 100;
             const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
-            const difficulty = getDifficultyConfig();
             const shouldSpawnFleshlight = Math.random() < difficulty.fleshlightChance;
 
             bird.pipes.push({
@@ -1109,6 +1134,7 @@
 
         // Draw pipes
         function drawPipes(bird, viewportHeight) {
+            const pipeGap = getDifficultyConfig().pipeGap;
             bird.pipes.forEach(pipe => {
                 // Top pipe
                 ctx.fillStyle = '#4CAF50';
@@ -1232,6 +1258,7 @@
 
         // Collision detection
         function checkCollision(bird, viewportHeight) {
+            const pipeGap = getDifficultyConfig().pipeGap;
             // Ground and ceiling - body collision
             if (bird.y + bird.height > viewportHeight || bird.y < 0) {
                 bird.gameOverReason = 'normal';

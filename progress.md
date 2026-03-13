@@ -24,6 +24,7 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - Refined the local cutout again so it reads cleaner at game scale and removed more of the leftover top-cap/edge artifacts from the first pass.
 - Fleshlight pickups now live in the horizontal space between pipe pairs instead of inside the pipe gap, and they are biased toward either the top or bottom of the lane to make them harder to collect.
 - The fleshlight thrust phase now runs at roughly 2x the previous speed, and the eye-pop moved to the end of the event so the run stays paused until the eyes return to normal.
+- Difficulty got a broad retune: every tier now has tighter pipe spacing, smaller openings, and harsher bird physics, with `FAST` taking the largest jump (`pipeSpeed 4.85`, `pipeSpacing 312`, `pipeGap 176`, `gravity 0.46`).
 - Verification:
 - Desktop regression pass with the bundled Playwright game client completed successfully against `http://127.0.0.1:4173/index.html`.
 - Mobile-sized browser checks confirmed the mobile menu hides extra modes and shows fullscreen single-player copy.
@@ -38,3 +39,5 @@ Original prompt: Fix/implement the mobile view of this app so it works with touc
 - The image-backed fleshlight asset loaded successfully in-browser (`337x634`) and manual screenshots confirmed both the floating pickup and the attached event animation use the real cutout instead of the placeholder vector.
 - Follow-up browser checks confirmed between-pipes placement in the top/bottom bands, a final eye-pop phase (`phase: "eye-pop"`) after the thrust sequence, and resumed play only after that phase clears.
 - Post-change regression pass completed again after the fleshlight-refinement update; bundled Playwright output still showed stable single-player state with fixed-world physics.
+- Follow-up numeric checks confirmed the difficulty tiers now diverge correctly: after 10 fixed steps, pipe X moved to `354.5` on `SLOW`, `347.0` on `MEDIUM`, and `335.5` on `FAST`, with matching gravity/gap changes applied to new birds.
+- Post-change regression pass completed again after the global difficulty retune; the bundled Playwright single-player burst now reaches `gameOver` faster on `MEDIUM`, confirming the base game is materially harder.
