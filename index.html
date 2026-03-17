@@ -295,7 +295,6 @@
         const playerColors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
         const skyGradientCache = new Map();
         const sunGlowGradientCache = new Map();
-        const singleChromeGradientCache = new Map();
         let cachedCanvasRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
         let pendingResizeFrame = 0;
         let lastViewportWidth = 0;
@@ -313,7 +312,6 @@
             singlePlayerLayoutCache = null;
             skyGradientCache.clear();
             sunGlowGradientCache.clear();
-            singleChromeGradientCache.clear();
         }
 
         function resizeCanvas() {
@@ -498,19 +496,6 @@
                 sunGlowGradientCache.set(viewportWidth, gradient);
             }
             return sunGlowGradientCache.get(viewportWidth);
-        }
-
-        function getSingleChromeGradient(container) {
-            const cacheKey = `${container.x}:${container.width}`;
-            if (!singleChromeGradientCache.has(cacheKey)) {
-                const gradient = ctx.createLinearGradient(container.x, 0, container.x + container.width, 0);
-                gradient.addColorStop(0, 'rgba(7, 14, 28, 0.58)');
-                gradient.addColorStop(0.18, 'rgba(15, 23, 39, 0.24)');
-                gradient.addColorStop(0.82, 'rgba(15, 23, 39, 0.24)');
-                gradient.addColorStop(1, 'rgba(7, 14, 28, 0.58)');
-                singleChromeGradientCache.set(cacheKey, gradient);
-            }
-            return singleChromeGradientCache.get(cacheKey);
         }
 
         function updateDisplayedScore(value, force = false) {
@@ -2010,6 +1995,12 @@
         }
 
         function drawSinglePlayerBackdrop(alpha = 0) {
+            if (!isMobileLayout) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
             const splitY = canvas.height * 0.5;
             ctx.fillStyle = getSkyGradient(canvas.height);
             ctx.fillRect(0, 0, canvas.width, splitY);
@@ -2021,49 +2012,30 @@
                 return;
             }
 
-            const leftWidth = Math.max(0, container.x);
-            const rightX = container.x + container.width;
-            const rightWidth = Math.max(0, canvas.width - rightX);
-
             ctx.save();
-            ctx.fillStyle = 'rgba(6, 12, 22, 0.22)';
-            ctx.fillRect(0, 0, leftWidth, canvas.height);
-            ctx.fillRect(rightX, 0, rightWidth, canvas.height);
-
-            ctx.fillStyle = getSingleChromeGradient(container);
-            ctx.fillRect(container.x, container.y, container.width, container.height);
-
-            if (renderBox.x > container.x) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-                ctx.fillRect(container.x, container.y, renderBox.x - container.x, container.height);
-            }
-
             const renderBoxRight = renderBox.x + renderBox.width;
-            const containerRight = container.x + container.width;
-            if (renderBoxRight < containerRight) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-                ctx.fillRect(renderBoxRight, container.y, containerRight - renderBoxRight, container.height);
+            const renderBoxBottom = renderBox.y + renderBox.height;
+            ctx.fillStyle = '#000';
+            if (renderBox.y > 0) {
+                ctx.fillRect(0, 0, canvas.width, renderBox.y);
+            }
+            if (renderBox.x > 0) {
+                ctx.fillRect(0, renderBox.y, renderBox.x, renderBox.height);
+            }
+            if (renderBoxRight < canvas.width) {
+                ctx.fillRect(renderBoxRight, renderBox.y, canvas.width - renderBoxRight, renderBox.height);
+            }
+            if (renderBoxBottom < canvas.height) {
+                ctx.fillRect(0, renderBoxBottom, canvas.width, canvas.height - renderBoxBottom);
             }
 
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+            ctx.strokeStyle = '#000';
             ctx.lineWidth = 4;
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-            ctx.shadowBlur = 18;
             ctx.strokeRect(
-                container.x + 2,
-                container.y + 2,
-                Math.max(0, container.width - 4),
-                Math.max(0, container.height - 4)
-            );
-
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(
-                renderBox.x + 2,
-                renderBox.y + 2,
-                Math.max(0, renderBox.width - 4),
-                Math.max(0, renderBox.height - 4)
+                renderBox.x - 2,
+                renderBox.y - 2,
+                Math.max(0, renderBox.width + 4),
+                Math.max(0, renderBox.height + 4)
             );
             ctx.restore();
         }
