@@ -75,6 +75,25 @@
             text-align: center;
         }
 
+        .screen-panel {
+            width: min(100%, 48rem);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: clamp(24px, 4vw, 40px);
+            border-radius: 28px;
+            border: 3px solid rgba(255, 255, 255, 0.16);
+            background: linear-gradient(180deg, rgba(15, 24, 44, 0.82), rgba(8, 13, 24, 0.72));
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(14px);
+        }
+
+        @media (min-aspect-ratio: 2/1) {
+            .screen-panel {
+                width: min(100%, 56rem);
+            }
+        }
+
         .screen.hidden {
             display: none;
         }
@@ -118,6 +137,19 @@
             .menu-button:hover {
                 transform: scale(1.1);
                 background: linear-gradient(to bottom, #ff1493, #ff69b4);
+            }
+        }
+
+        .secondary-menu-button {
+            font-size: clamp(18px, 4vw, 28px);
+            padding: 14px 28px;
+            background: linear-gradient(to bottom, #69b8ff, #2e7de0);
+            width: min(100%, 16rem);
+        }
+
+        @media (hover: hover) {
+            .secondary-menu-button:hover {
+                background: linear-gradient(to bottom, #2e7de0, #69b8ff);
             }
         }
 
@@ -195,43 +227,52 @@
     <div class="game-container" id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="menuScreen" class="screen">
-            <h1>FAP BIRD</h1>
-            <div class="difficulty-panel">
-                <p class="instructions">Fixed Speed Difficulty</p>
-                <div class="difficulty-buttons" id="difficultyButtons">
-                    <button class="difficulty-button" data-difficulty="slow">SLOW</button>
-                    <button class="difficulty-button selected" data-difficulty="medium">MEDIUM</button>
-                    <button class="difficulty-button" data-difficulty="fast">FAST</button>
+            <div class="screen-panel">
+                <h1>FAP BIRD</h1>
+                <div class="difficulty-panel">
+                    <p class="instructions">Fixed Speed Difficulty</p>
+                    <div class="difficulty-buttons" id="difficultyButtons">
+                        <button class="difficulty-button" data-difficulty="slow">SLOW</button>
+                        <button class="difficulty-button selected" data-difficulty="medium">MEDIUM</button>
+                        <button class="difficulty-button" data-difficulty="fast">FAST</button>
+                    </div>
                 </div>
+                <button class="menu-button" id="singlePlayerBtn">SINGLE PLAYER</button>
+                <button class="menu-button" id="multiPlayerBtn">MULTIPLAYER</button>
+                <button class="menu-button" id="unlimitedPlayerBtn">UNLIMITED</button>
+                <p id="mobileModeNotice" class="instructions mobile-note" hidden>Mobile uses fullscreen single player only.</p>
             </div>
-            <button class="menu-button" id="singlePlayerBtn">SINGLE PLAYER</button>
-            <button class="menu-button" id="multiPlayerBtn">MULTIPLAYER</button>
-            <button class="menu-button" id="unlimitedPlayerBtn">UNLIMITED</button>
-            <p id="mobileModeNotice" class="instructions mobile-note" hidden>Mobile uses fullscreen single player only.</p>
         </div>
         <div id="playerSetupScreen" class="screen hidden">
-            <h1>PLAYER SETUP</h1>
-            <p class="instructions">Press any key to join (ESC to go back)</p>
-            <div id="playersList"></div>
-            <p class="instructions" style="margin-top: 30px;">Press ENTER to start</p>
+            <div class="screen-panel">
+                <h1>PLAYER SETUP</h1>
+                <p class="instructions">Press any key to join (ESC to go back)</p>
+                <div id="playersList"></div>
+                <p class="instructions" style="margin-top: 30px;">Press ENTER to start</p>
+            </div>
         </div>
         <div id="startScreen" class="screen hidden">
-            <h1>FAP BIRD</h1>
-            <p id="difficultyCurrent" class="difficulty-current">Difficulty: MEDIUM</p>
-            <p id="startPrompt">Press SPACE or TAP to start</p>
-            <p id="flapPrompt" class="instructions">Press SPACE or TAP to fap and fly!</p>
+            <div class="screen-panel">
+                <h1>FAP BIRD</h1>
+                <p id="difficultyCurrent" class="difficulty-current">Difficulty: MEDIUM</p>
+                <p id="startPrompt">Press SPACE or TAP to start</p>
+                <p id="flapPrompt" class="instructions">Press SPACE or TAP to fap and fly!</p>
+            </div>
         </div>
         <div id="gameOverScreen" class="screen hidden">
-            <h1>GAME OVER</h1>
-            <p>Score: <span id="finalScore">0</span></p>
-            <p id="restartText">Press SPACE or TAP to try again</p>
+            <div class="screen-panel">
+                <h1>GAME OVER</h1>
+                <p>Score: <span id="finalScore">0</span></p>
+                <p id="restartText">Press SPACE or TAP to try again</p>
+                <button type="button" class="menu-button secondary-menu-button" id="homeButton">HOME</button>
+            </div>
         </div>
         <div id="score">0</div>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
         const gameContainer = document.getElementById('gameContainer');
         const menuScreen = document.getElementById('menuScreen');
         const playerSetupScreen = document.getElementById('playerSetupScreen');
@@ -239,6 +280,8 @@
         const gameOverScreen = document.getElementById('gameOverScreen');
         const scoreDisplay = document.getElementById('score');
         const finalScoreDisplay = document.getElementById('finalScore');
+        const gameOverTitle = gameOverScreen.querySelector('h1');
+        const homeButton = document.getElementById('homeButton');
         const singlePlayerBtn = document.getElementById('singlePlayerBtn');
         const multiPlayerBtn = document.getElementById('multiPlayerBtn');
         const unlimitedPlayerBtn = document.getElementById('unlimitedPlayerBtn');
@@ -249,24 +292,57 @@
         const restartText = document.getElementById('restartText');
         const difficultyButtons = Array.from(document.querySelectorAll('.difficulty-button'));
         const difficultyCurrent = document.getElementById('difficultyCurrent');
+        const playerColors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
+        const skyGradientCache = new Map();
+        const sunGlowGradientCache = new Map();
+        const singleChromeGradientCache = new Map();
+        let cachedCanvasRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        let pendingResizeFrame = 0;
+        let lastViewportWidth = 0;
+        let lastViewportHeight = 0;
+        let displayedSinglePlayerScore = null;
+        let gameOverCooldownTimeoutId = 0;
+        let singlePlayerLayoutCache = null;
 
         // Set canvas to full screen
         function setAppHeight() {
             document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
         }
 
+        function invalidateLayoutCaches() {
+            singlePlayerLayoutCache = null;
+            skyGradientCache.clear();
+            sunGlowGradientCache.clear();
+            singleChromeGradientCache.clear();
+        }
+
         function resizeCanvas() {
+            const nextWidth = window.innerWidth;
+            const nextHeight = window.innerHeight;
             setAppHeight();
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            canvas.width = nextWidth;
+            canvas.height = nextHeight;
+
+            if (nextWidth !== lastViewportWidth || nextHeight !== lastViewportHeight) {
+                lastViewportWidth = nextWidth;
+                lastViewportHeight = nextHeight;
+                invalidateLayoutCaches();
+            }
+
+            cachedCanvasRect = canvas.getBoundingClientRect();
         }
         resizeCanvas();
 
         function detectMobileLayout() {
             const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+            const shortEdge = Math.min(window.innerWidth, window.innerHeight);
+            const longEdge = Math.max(window.innerWidth, window.innerHeight);
             const compactWidth = window.innerWidth <= 900;
-            const touchFriendlyHeight = Math.min(window.innerWidth, window.innerHeight) <= 1100;
-            return compactWidth || (hasCoarsePointer && touchFriendlyHeight);
+            const touchFriendlyViewport = shortEdge <= 1100;
+            const tabletLikeViewport = shortEdge <= 1100 &&
+                longEdge <= 1400 &&
+                (longEdge / shortEdge) <= 1.45;
+            return compactWidth || (hasCoarsePointer && touchFriendlyViewport) || tabletLikeViewport;
         }
 
         // Game state
@@ -288,7 +364,7 @@
             slow: {
                 label: 'SLOW',
                 pipeSpeed: 2.95,
-                pipeSpacing: 388,
+                pipeSpacing: 436,
                 pipeGap: 224,
                 gravity: 0.35,
                 jumpForce: -6.9,
@@ -297,7 +373,7 @@
             medium: {
                 label: 'MEDIUM',
                 pipeSpeed: 3.7,
-                pipeSpacing: 352,
+                pipeSpacing: 400,
                 pipeGap: 204,
                 gravity: 0.4,
                 jumpForce: -6.95,
@@ -306,7 +382,7 @@
             fast: {
                 label: 'FAST',
                 pipeSpeed: 4.85,
-                pipeSpacing: 312,
+                pipeSpacing: 360,
                 pipeGap: 176,
                 gravity: 0.46,
                 jumpForce: -7,
@@ -340,22 +416,26 @@
         });
         fleshlightImage.src = './assets/fleshlight-cropped.png';
 
-        function getSinglePlayerViewport() {
-            if (isMobileLayout) {
-                return { x: 0, y: 0, width: canvas.width, height: canvas.height };
+        function resolveSinglePlayerLayout() {
+            if (singlePlayerLayoutCache) {
+                return singlePlayerLayoutCache;
             }
 
-            const width = canvas.width * 0.3;
-            return {
-                x: (canvas.width - width) / 2,
-                y: 0,
-                width: width,
-                height: canvas.height
-            };
-        }
+            let container;
+            if (isMobileLayout) {
+                container = { x: 0, y: 0, width: canvas.width, height: canvas.height };
+            } else {
+                const minWidth = Math.min(canvas.width * 0.86, 640);
+                const maxWidth = Math.min(canvas.width * 0.9, 980);
+                const width = Math.min(maxWidth, Math.max(canvas.width * 0.38, minWidth));
+                container = {
+                    x: (canvas.width - width) / 2,
+                    y: 0,
+                    width: width,
+                    height: canvas.height
+                };
+            }
 
-        function getSinglePlayerRenderBox() {
-            const container = getSinglePlayerViewport();
             const scale = Math.min(
                 container.width / singlePlayerWorld.width,
                 container.height / singlePlayerWorld.height
@@ -363,26 +443,86 @@
             const width = singlePlayerWorld.width * scale;
             const height = singlePlayerWorld.height * scale;
 
-            return {
-                x: container.x + (container.width - width) / 2,
-                y: container.y + (container.height - height) / 2,
-                width: width,
-                height: height,
-                scale: scale,
-                container: container
+            singlePlayerLayoutCache = {
+                container,
+                renderBox: {
+                    x: container.x + (container.width - width) / 2,
+                    y: container.y + (container.height - height) / 2,
+                    width: width,
+                    height: height,
+                    scale: scale,
+                    container: container
+                }
             };
+            return singlePlayerLayoutCache;
+        }
+
+        function getSinglePlayerViewport() {
+            return resolveSinglePlayerLayout().container;
+        }
+
+        function getSinglePlayerRenderBox() {
+            return resolveSinglePlayerLayout().renderBox;
         }
 
         function getDifficultyConfig() {
             return difficultyConfigs[selectedDifficulty];
         }
 
-        function lerp(start, end, alpha) {
-            return start + (end - start) * alpha;
+        function getSkyGradient(viewportHeight) {
+            if (!skyGradientCache.has(viewportHeight)) {
+                const gradient = ctx.createLinearGradient(0, 0, 0, viewportHeight / 2);
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(0.6, '#B0E0E6');
+                gradient.addColorStop(1, '#E0F6FF');
+                skyGradientCache.set(viewportHeight, gradient);
+            }
+            return skyGradientCache.get(viewportHeight);
         }
 
-        function clonePenisSegments(segments) {
-            return segments.map((segment) => ({ ...segment }));
+        function getSunGlowGradient(viewportWidth) {
+            if (!sunGlowGradientCache.has(viewportWidth)) {
+                const sunX = viewportWidth - 120;
+                const sunY = 100;
+                const sunRadius = 50;
+                const gradient = ctx.createRadialGradient(
+                    sunX,
+                    sunY,
+                    sunRadius * 0.5,
+                    sunX,
+                    sunY,
+                    sunRadius * 1.5
+                );
+                gradient.addColorStop(0, 'rgba(255, 255, 100, 0.4)');
+                gradient.addColorStop(1, 'rgba(255, 255, 100, 0)');
+                sunGlowGradientCache.set(viewportWidth, gradient);
+            }
+            return sunGlowGradientCache.get(viewportWidth);
+        }
+
+        function getSingleChromeGradient(container) {
+            const cacheKey = `${container.x}:${container.width}`;
+            if (!singleChromeGradientCache.has(cacheKey)) {
+                const gradient = ctx.createLinearGradient(container.x, 0, container.x + container.width, 0);
+                gradient.addColorStop(0, 'rgba(7, 14, 28, 0.58)');
+                gradient.addColorStop(0.18, 'rgba(15, 23, 39, 0.24)');
+                gradient.addColorStop(0.82, 'rgba(15, 23, 39, 0.24)');
+                gradient.addColorStop(1, 'rgba(7, 14, 28, 0.58)');
+                singleChromeGradientCache.set(cacheKey, gradient);
+            }
+            return singleChromeGradientCache.get(cacheKey);
+        }
+
+        function updateDisplayedScore(value, force = false) {
+            const nextValue = String(value);
+            if (force || displayedSinglePlayerScore !== nextValue) {
+                displayedSinglePlayerScore = nextValue;
+                scoreDisplay.textContent = nextValue;
+            }
+        }
+
+        function lerp(start, end, alpha) {
+            return start + (end - start) * alpha;
         }
 
         function updateDifficultyUI() {
@@ -438,11 +578,18 @@
             gameMode = 'single';
             players = [];
             usedKeys.clear();
+            clearTimeout(gameOverCooldownTimeoutId);
+            displayedSinglePlayerScore = null;
             scoreDisplay.style.display = 'none';
             menuScreen.classList.remove('hidden');
             playerSetupScreen.classList.add('hidden');
             startScreen.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
+        }
+
+        function returnToHomeMenu() {
+            forceMenuState();
+            updateResponsiveState();
         }
 
         function updateResponsiveState({ fromResize = false } = {}) {
@@ -509,7 +656,14 @@
             bird.prevRotation = bird.rotation;
             bird.prevVelocity = bird.velocity;
             bird.prevBallsAngle = bird.ballsAngle;
-            bird.prevPenisSegments = clonePenisSegments(bird.penisSegments);
+            bird.penisSegments.forEach((segment) => {
+                segment.prevX = segment.x;
+                segment.prevY = segment.y;
+                segment.prevEndX = segment.endX;
+                segment.prevEndY = segment.endY;
+                segment.prevLength = segment.length;
+                segment.prevRenderAngle = segment.renderAngle;
+            });
 
             bird.particles.forEach((particle) => {
                 particle.prevX = particle.x;
@@ -533,8 +687,23 @@
         function createBird(key, color = '#FFD700', viewportHeight = 900) {
             const difficulty = getDifficultyConfig();
             const penisSegments = [];
+            const renderPenisSegments = [];
             for (let i = 0; i < penisSegmentCount; i++) {
                 penisSegments.push({
+                    x: 0,
+                    y: 0,
+                    endX: 0,
+                    endY: 0,
+                    length: 0,
+                    renderAngle: 0,
+                    prevX: 0,
+                    prevY: 0,
+                    prevEndX: 0,
+                    prevEndY: 0,
+                    prevLength: 0,
+                    prevRenderAngle: 0
+                });
+                renderPenisSegments.push({
                     x: 0,
                     y: 0,
                     endX: 0,
@@ -561,7 +730,7 @@
                 prevVelocity: 0,
                 penisLength: 15,
                 penisSegments: penisSegments, // Multi-segment rope
-                prevPenisSegments: [],
+                renderPenisSegments: renderPenisSegments,
                 penisJiggle: 0,
                 ballsAngle: Math.PI / 2,
                 prevBallsAngle: Math.PI / 2,
@@ -753,7 +922,8 @@
 
         // Update and draw particles
         function updateParticles(bird) {
-            for (let i = bird.particles.length - 1; i >= 0; i--) {
+            let writeIndex = 0;
+            for (let i = 0; i < bird.particles.length; i++) {
                 const p = bird.particles[i];
                 p.prevX = p.x;
                 p.prevY = p.y;
@@ -762,10 +932,11 @@
                 p.vy += 0.2; // gravity
                 p.life -= p.decay;
 
-                if (p.life <= 0) {
-                    bird.particles.splice(i, 1);
+                if (p.life > 0) {
+                    bird.particles[writeIndex++] = p;
                 }
             }
+            bird.particles.length = writeIndex;
         }
 
         function drawParticles(bird, alpha = 0) {
@@ -950,8 +1121,7 @@
             return eventState;
         }
 
-        function getBirdEyeScale(bird, alpha = 0) {
-            const eventState = getRenderedEventState(bird, alpha);
+        function getBirdEyeScale(eventState) {
             if (!eventState || eventState.phase !== 'eye-pop') {
                 return 1;
             }
@@ -994,19 +1164,18 @@
             return false;
         }
 
-        // Draw bird
-        function getInterpolatedPenisSegments(bird, alpha = 0) {
-            return bird.penisSegments.map((segment, index) => {
-                const previous = bird.prevPenisSegments[index] || segment;
-                return {
-                    x: lerp(previous.x, segment.x, alpha),
-                    y: lerp(previous.y, segment.y, alpha),
-                    endX: lerp(previous.endX, segment.endX, alpha),
-                    endY: lerp(previous.endY, segment.endY, alpha),
-                    length: lerp(previous.length, segment.length, alpha),
-                    renderAngle: lerp(previous.renderAngle, segment.renderAngle, alpha)
-                };
-            });
+        function syncRenderedPenisSegments(bird, alpha = 0) {
+            for (let i = 0; i < bird.penisSegments.length; i++) {
+                const segment = bird.penisSegments[i];
+                const renderSegment = bird.renderPenisSegments[i];
+
+                renderSegment.x = lerp(segment.prevX ?? segment.x, segment.x, alpha);
+                renderSegment.y = lerp(segment.prevY ?? segment.y, segment.y, alpha);
+                renderSegment.endX = lerp(segment.prevEndX ?? segment.endX, segment.endX, alpha);
+                renderSegment.endY = lerp(segment.prevEndY ?? segment.endY, segment.endY, alpha);
+                renderSegment.length = lerp(segment.prevLength ?? segment.length, segment.length, alpha);
+                renderSegment.renderAngle = lerp(segment.prevRenderAngle ?? segment.renderAngle, segment.renderAngle, alpha);
+            }
         }
 
         function drawBird(bird, alpha = 0) {
@@ -1015,7 +1184,8 @@
             const renderY = lerp(bird.prevY ?? bird.y, bird.y, alpha);
             const renderRotation = lerp(bird.prevRotation ?? bird.rotation, bird.rotation, alpha);
             const renderBallsAngle = lerp(bird.prevBallsAngle ?? bird.ballsAngle, bird.ballsAngle, alpha);
-            const renderSegments = getInterpolatedPenisSegments(bird, alpha);
+            syncRenderedPenisSegments(bird, alpha);
+            const renderSegments = bird.renderPenisSegments;
             const eventState = getRenderedEventState(bird, alpha);
 
             ctx.translate(renderX + bird.width / 2, renderY + bird.height / 2);
@@ -1023,7 +1193,7 @@
 
             const penisWidth = 8;
             const ballRadius = 8;
-            const eyeScale = getBirdEyeScale(bird, alpha);
+            const eyeScale = getBirdEyeScale(eventState);
 
             // Calculate rope physics positions
             const ballsLength = 8; // Shorter - closer to body
@@ -1329,14 +1499,15 @@
 
         // Update pipes
         function updatePipes(bird, viewportWidth, viewportHeight) {
+            const difficulty = getDifficultyConfig();
             const lastPipe = bird.pipes[bird.pipes.length - 1];
-            if (!lastPipe || lastPipe.x < viewportWidth - getDifficultyConfig().pipeSpacing) {
+            if (!lastPipe || lastPipe.x < viewportWidth - difficulty.pipeSpacing) {
                 createPipe(bird, viewportWidth, viewportHeight);
             }
 
             for (let i = bird.pipes.length - 1; i >= 0; i--) {
                 bird.pipes[i].prevX = bird.pipes[i].x;
-                bird.pipes[i].x -= getDifficultyConfig().pipeSpeed;
+                bird.pipes[i].x -= difficulty.pipeSpeed;
 
                 // Score when passing pipe
                 if (!bird.pipes[i].scored && bird.pipes[i].x + pipeWidth < bird.x) {
@@ -1370,6 +1541,8 @@
             const penisWidth = 8;
             const centerX = bird.x + bird.width / 2;
             const centerY = bird.y + bird.height / 2;
+            const cosRotation = Math.cos(bird.rotation);
+            const sinRotation = Math.sin(bird.rotation);
 
             // Pipes
             for (let pipe of bird.pipes) {
@@ -1386,11 +1559,11 @@
                     const segment = bird.penisSegments[i];
 
                     // Check segment start
-                    const startX = centerX + segment.x * Math.cos(bird.rotation) + segment.y * Math.sin(bird.rotation);
-                    const startY = centerY - segment.x * Math.sin(bird.rotation) + segment.y * Math.cos(bird.rotation);
+                    const startX = centerX + segment.x * cosRotation + segment.y * sinRotation;
+                    const startY = centerY - segment.x * sinRotation + segment.y * cosRotation;
 
-                    const endX = centerX + segment.endX * Math.cos(bird.rotation) + segment.endY * Math.sin(bird.rotation);
-                    const endY = centerY - segment.endX * Math.sin(bird.rotation) + segment.endY * Math.cos(bird.rotation);
+                    const endX = centerX + segment.endX * cosRotation + segment.endY * sinRotation;
+                    const endY = centerY - segment.endX * sinRotation + segment.endY * cosRotation;
 
                     // Check if either end of segment hits pipe
                     if (startX + penisWidth > pipe.x && startX - penisWidth < pipe.x + pipeWidth) {
@@ -1428,10 +1601,7 @@
             const sunRadius = 50;
 
             // Sun glow
-            const sunGradient = ctx.createRadialGradient(sunX, sunY, sunRadius * 0.5, sunX, sunY, sunRadius * 1.5);
-            sunGradient.addColorStop(0, 'rgba(255, 255, 100, 0.4)');
-            sunGradient.addColorStop(1, 'rgba(255, 255, 100, 0)');
-            ctx.fillStyle = sunGradient;
+            ctx.fillStyle = getSunGlowGradient(viewportWidth);
             ctx.beginPath();
             ctx.arc(sunX, sunY, sunRadius * 1.5, 0, Math.PI * 2);
             ctx.fill();
@@ -1469,10 +1639,10 @@
         }
 
         function drawClouds(alpha = 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             clouds.forEach(cloud => {
                 const cloudX = lerp(cloud.prevX ?? cloud.x, cloud.x, alpha);
                 const cloudY = lerp(cloud.prevY ?? cloud.y, cloud.y, alpha);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
 
                 // Draw cloud with multiple circles for fluffy effect
                 ctx.beginPath();
@@ -1501,16 +1671,16 @@
             ctx.strokeStyle = '#7A9B2D';
             ctx.lineWidth = 3;
             const grassWrapWidth = viewportWidth + 40;
+            ctx.beginPath();
             for (let x = 0; x < viewportWidth + 20; x += 20) {
                 const offset = ((x - displayFrame * 2) % grassWrapWidth + grassWrapWidth) % grassWrapWidth;
                 for (let i = 0; i < 3; i++) {
                     const grassX = offset + i * 7;
-                    ctx.beginPath();
                     ctx.moveTo(grassX, groundY + 40);
                     ctx.lineTo(grassX + Math.sin((displayFrame + grassX) * 0.05) * 3, groundY + 25);
-                    ctx.stroke();
                 }
             }
+            ctx.stroke();
 
             // Dirt details
             ctx.fillStyle = '#6B5344';
@@ -1559,11 +1729,7 @@
             ctx.translate(vp.x, vp.y);
 
             // Draw sky gradient
-            const skyGradient = ctx.createLinearGradient(0, 0, 0, vp.height / 2);
-            skyGradient.addColorStop(0, '#87CEEB');
-            skyGradient.addColorStop(0.6, '#B0E0E6');
-            skyGradient.addColorStop(1, '#E0F6FF');
-            ctx.fillStyle = skyGradient;
+            ctx.fillStyle = getSkyGradient(vp.height);
             ctx.fillRect(0, 0, vp.width, vp.height / 2);
 
             // Draw sun (scaled)
@@ -1641,7 +1807,6 @@
             gameOverTime = Date.now();
             gameOverScreen.classList.remove('hidden');
 
-            const gameOverTitle = document.querySelector('#gameOverScreen h1');
             gameOverTitle.textContent = bird.gameOverReason === 'raper' ? 'YOU RAPER' : 'GAME OVER';
             finalScoreDisplay.textContent = bird.score;
             playGameOverSound();
@@ -1662,7 +1827,6 @@
                 }
             });
 
-            const gameOverTitle = document.querySelector('#gameOverScreen h1');
             gameOverTitle.textContent = `PLAYER ${players.indexOf(winner) + 1} WINS!`;
             finalScoreDisplay.textContent = winner.score;
             playGameOverSound();
@@ -1704,7 +1868,7 @@
             }
 
             const bird = players[0];
-            scoreDisplay.textContent = bird.score;
+            updateDisplayedScore(bird.score);
             captureBirdRenderState(bird);
 
             if (gameState === 'playing') {
@@ -1813,7 +1977,7 @@
                 }
             }
 
-            if (players.every((bird) => !bird.alive)) {
+            if (allDead) {
                 beginSharedMultiplayerGameOver();
             }
         }
@@ -1847,25 +2011,68 @@
 
         function drawSinglePlayerBackdrop(alpha = 0) {
             const splitY = canvas.height * 0.5;
-            const gradient = ctx.createLinearGradient(0, 0, 0, splitY);
-            gradient.addColorStop(0, '#87CEEB');
-            gradient.addColorStop(0.6, '#B0E0E6');
-            gradient.addColorStop(1, '#E0F6FF');
-            ctx.fillStyle = gradient;
+            ctx.fillStyle = getSkyGradient(canvas.height);
             ctx.fillRect(0, 0, canvas.width, splitY);
             drawGround(canvas.width, canvas.height, alpha);
         }
 
-        function renderSinglePlayer(alpha = 0) {
-            const renderBox = getSinglePlayerRenderBox();
-            const bird = players[0];
-
+        function drawSinglePlayerChrome(container, renderBox) {
             if (isMobileLayout) {
-                drawSinglePlayerBackdrop(alpha);
-            } else {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
             }
+
+            const leftWidth = Math.max(0, container.x);
+            const rightX = container.x + container.width;
+            const rightWidth = Math.max(0, canvas.width - rightX);
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(6, 12, 22, 0.22)';
+            ctx.fillRect(0, 0, leftWidth, canvas.height);
+            ctx.fillRect(rightX, 0, rightWidth, canvas.height);
+
+            ctx.fillStyle = getSingleChromeGradient(container);
+            ctx.fillRect(container.x, container.y, container.width, container.height);
+
+            if (renderBox.x > container.x) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+                ctx.fillRect(container.x, container.y, renderBox.x - container.x, container.height);
+            }
+
+            const renderBoxRight = renderBox.x + renderBox.width;
+            const containerRight = container.x + container.width;
+            if (renderBoxRight < containerRight) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+                ctx.fillRect(renderBoxRight, container.y, containerRight - renderBoxRight, container.height);
+            }
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+            ctx.lineWidth = 4;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+            ctx.shadowBlur = 18;
+            ctx.strokeRect(
+                container.x + 2,
+                container.y + 2,
+                Math.max(0, container.width - 4),
+                Math.max(0, container.height - 4)
+            );
+
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                renderBox.x + 2,
+                renderBox.y + 2,
+                Math.max(0, renderBox.width - 4),
+                Math.max(0, renderBox.height - 4)
+            );
+            ctx.restore();
+        }
+
+        function renderSinglePlayer(alpha = 0) {
+            const container = getSinglePlayerViewport();
+            const renderBox = getSinglePlayerRenderBox();
+            const bird = players[0] || null;
+            drawSinglePlayerBackdrop(alpha);
 
             ctx.save();
             ctx.beginPath();
@@ -1874,27 +2081,24 @@
             ctx.translate(renderBox.x, renderBox.y);
             ctx.scale(renderBox.scale, renderBox.scale);
 
-            const skyGradient = ctx.createLinearGradient(0, 0, 0, singlePlayerWorld.height / 2);
-            skyGradient.addColorStop(0, '#87CEEB');
-            skyGradient.addColorStop(0.6, '#B0E0E6');
-            skyGradient.addColorStop(1, '#E0F6FF');
-            ctx.fillStyle = skyGradient;
+            ctx.fillStyle = getSkyGradient(singlePlayerWorld.height);
             ctx.fillRect(0, 0, singlePlayerWorld.width, singlePlayerWorld.height / 2);
 
             drawSun(singlePlayerWorld.width);
             drawClouds(alpha);
             drawGround(singlePlayerWorld.width, singlePlayerWorld.height, alpha);
-            drawPipes(bird, singlePlayerWorld.height, alpha);
-            drawFleshlights(bird, alpha);
-            drawParticles(bird, alpha);
-            drawBird(bird, alpha);
+            if (bird) {
+                drawPipes(bird, singlePlayerWorld.height, alpha);
+                drawFleshlights(bird, alpha);
+                drawParticles(bird, alpha);
+                drawBird(bird, alpha);
+            }
             ctx.restore();
+            drawSinglePlayerChrome(container, renderBox);
         }
 
         function renderGame(alpha = 0) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (gameMode === 'single' && players.length > 0) {
+            if (gameMode === 'single') {
                 renderSinglePlayer(alpha);
                 return;
             }
@@ -1911,6 +2115,8 @@
         }
 
         function gameLoop(timestamp = 0) {
+            animationFrameId = 0;
+
             if (!lastFrameTimestamp) {
                 lastFrameTimestamp = timestamp;
             }
@@ -1928,10 +2134,23 @@
                 ? 0
                 : Math.min(1, accumulatorMs / fixedStepMs);
             renderGame(renderAlpha);
-            animationFrameId = requestAnimationFrame(gameLoop);
+            scheduleGameLoop();
         }
 
-        window.advanceTime = async (ms) => {
+        function stopGameLoop() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = 0;
+            }
+        }
+
+        function scheduleGameLoop() {
+            if (!animationFrameId && !document.hidden) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        window.advanceTime = (ms) => {
             const totalSteps = Math.max(1, Math.round(ms / fixedStepMs));
             for (let i = 0; i < totalSteps; i++) {
                 stepGame();
@@ -1942,8 +2161,9 @@
         };
 
         function setGameOverCooldownText(nextText) {
+            clearTimeout(gameOverCooldownTimeoutId);
             restartText.textContent = 'Wait...';
-            setTimeout(() => {
+            gameOverCooldownTimeoutId = window.setTimeout(() => {
                 if (gameState === 'gameOver') {
                     restartText.textContent = nextText;
                 }
@@ -2016,9 +2236,8 @@
                 return false;
             }
 
-            const rect = canvas.getBoundingClientRect();
-            const touchX = clientX - rect.left;
-            const touchY = clientY - rect.top;
+            const touchX = clientX - cachedCanvasRect.left;
+            const touchY = clientY - cachedCanvasRect.top;
 
             if (gameState === 'start') {
                 startCurrentRound();
@@ -2095,7 +2314,7 @@
         }
 
         function renderGameToText() {
-            const singleViewport = getSinglePlayerRenderBox();
+            const singleViewport = gameMode === 'single' ? getSinglePlayerRenderBox() : null;
             return JSON.stringify({
                 coordinates: 'origin top-left; x increases right; y increases down',
                 gameState: gameState,
@@ -2154,6 +2373,7 @@
             const bird = createBird('Space', '#FFD700', singlePlayerWorld.height);
             positionSinglePlayerBird(bird);
             players = [bird];
+            updateDisplayedScore(0, true);
             updateControlText();
         });
 
@@ -2192,7 +2412,6 @@
         // Update players list display
         function updatePlayersList() {
             playersList.innerHTML = '';
-            const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
             const maxPlayers = gameMode === 'unlimited' ? 8 : 4;
 
             if (players.length === 0) {
@@ -2202,7 +2421,7 @@
                     const p = document.createElement('p');
                     p.className = 'player-setup player-joined';
                     p.textContent = `Player ${index + 1}: ${player.key.toUpperCase()}`;
-                    p.style.color = colors[index % colors.length];
+                    p.style.color = playerColors[index % playerColors.length];
                     playersList.appendChild(p);
                 });
             }
@@ -2234,18 +2453,17 @@
             }
             score = 0;
             frames = 0;
+            displayedSinglePlayerScore = null;
+            updateDisplayedScore(score, true);
         }
 
         // Handle input
         document.addEventListener('keydown', (e) => {
-            unlockAudio();
-
             if (gameState === 'playerSetup') {
                 e.preventDefault();
                 if (e.code === 'Escape') {
                     // Go back to menu
-                    forceMenuState();
-                    updateResponsiveState();
+                    returnToHomeMenu();
                 } else if (e.code === 'Enter') {
                     if (players.length > 0) {
                         // Start game
@@ -2258,12 +2476,12 @@
                     // Add player
                     const maxPlayers = gameMode === 'unlimited' ? 8 : 4;
                     if (players.length < maxPlayers && !usedKeys.has(e.code)) {
-                        const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#95E1D3', '#FF69B4', '#00CED1', '#FFD700', '#32CD32'];
                         // Use a default height for now, will be updated when game starts
-                        const bird = createBird(e.code, colors[players.length % colors.length], 900);
+                        const bird = createBird(e.code, playerColors[players.length % playerColors.length], 900);
                         players.push(bird);
                         usedKeys.add(e.code);
                         updatePlayersList();
+                        unlockAudio();
                         playScoreSound();
                     }
                 }
@@ -2325,8 +2543,15 @@
                 } else if (gameMode === 'multi' && e.code === 'Enter') {
                     e.preventDefault();
                     restartMultiplayerRound();
+                } else if (e.code === 'Escape') {
+                    e.preventDefault();
+                    returnToHomeMenu();
                 }
             }
+        });
+
+        homeButton.addEventListener('click', () => {
+            returnToHomeMenu();
         });
 
         function onTouchPointerDown(e) {
@@ -2334,11 +2559,11 @@
                 return;
             }
 
-            unlockAudio();
-
             if (e.target.closest('button')) {
                 return;
             }
+
+            unlockAudio();
 
             if (handleTouchGameInput(e.clientX, e.clientY)) {
                 e.preventDefault();
@@ -2346,11 +2571,11 @@
         }
 
         function onLegacyTouchStart(e) {
-            unlockAudio();
-
             if (e.target.closest('button')) {
                 return;
             }
+
+            unlockAudio();
 
             const touch = e.touches[0];
             if (touch && handleTouchGameInput(touch.clientX, touch.clientY)) {
@@ -2362,30 +2587,51 @@
             gameContainer.addEventListener('pointerdown', onTouchPointerDown, { passive: false });
         } else {
             gameContainer.addEventListener('touchstart', onLegacyTouchStart, { passive: false });
+            gameContainer.addEventListener('touchmove', (e) => {
+                if (e.target.closest('button')) {
+                    return;
+                }
+                e.preventDefault();
+            }, { passive: false });
+
+            gameContainer.addEventListener('touchend', (e) => {
+                if (e.target.closest('button')) {
+                    return;
+                }
+                e.preventDefault();
+            }, { passive: false });
         }
-
-        gameContainer.addEventListener('touchmove', (e) => {
-            if (e.target.closest('button')) {
-                return;
-            }
-            e.preventDefault();
-        }, { passive: false });
-
-        gameContainer.addEventListener('touchend', (e) => {
-            if (e.target.closest('button')) {
-                return;
-            }
-            e.preventDefault();
-        }, { passive: false });
 
         updateResponsiveState();
         window.addEventListener('resize', () => {
-            resizeCanvas();
-            updateResponsiveState({ fromResize: true });
+            if (pendingResizeFrame) {
+                return;
+            }
+            pendingResizeFrame = requestAnimationFrame(() => {
+                pendingResizeFrame = 0;
+                resizeCanvas();
+                updateResponsiveState({ fromResize: true });
+            });
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopGameLoop();
+                lastFrameTimestamp = 0;
+                accumulatorMs = 0;
+                if (audioContext.state === 'running') {
+                    audioContext.suspend().catch(() => {});
+                }
+                return;
+            }
+
+            lastFrameTimestamp = 0;
+            accumulatorMs = 0;
+            scheduleGameLoop();
         });
 
         // Start game loop
-        gameLoop();
+        scheduleGameLoop();
     </script>
 </body>
 </html>
